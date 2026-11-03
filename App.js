@@ -156,7 +156,7 @@ export default function App() {
       }
     }
 
-    loadInitialData();
+    forceCloudSync();
 
     const channel = supabase
       .channel('public:domingos_data')
@@ -192,32 +192,23 @@ export default function App() {
     }
   };
 
-  const loadInitialData = async () => {
+  const forceCloudSync = async () => {
     try {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const localData = localStorage.getItem('escuela_dominical_local');
-        if (localData) setAppState(JSON.parse(localData));
-      } else {
-        const localData = await AsyncStorage.getItem('escuela_dominical_local');
-        if (localData) setAppState(JSON.parse(localData));
-      }
-
+      // Forzamos la consulta directa a Supabase ignorando cualquier caché viejo
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
         .eq('id', '1')
         .maybeSingle();
 
-      if (error) {
-        console.error('Error al conectar con Supabase:', error);
-      }
-
       if (data && data.data) {
         setAppState(data.data);
         saveLocally(data.data);
+        setNotification('🔄 ¡Sincronizado con la nube!');
+        setTimeout(() => setNotification(''), 3000);
       }
     } catch (err) {
-      console.log('Error al cargar datos iniciales:', err);
+      console.log('Error al forzar sincronización:', err);
     }
   };
 
@@ -358,16 +349,22 @@ export default function App() {
         <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
           <Text style={[styles.headerTitle, { color: theme.headerText }]}>Ministerio Infantil</Text>
           
-          <View style={styles.themeSelector}>
-            {Object.keys(THEMES).map(tKey => (
-              <TouchableOpacity 
-                key={tKey} 
-                style={[styles.themeBtn, currentThemeKey === tKey && styles.themeBtnActive]}
-                onPress={() => setCurrentThemeKey(tKey)}
-              >
-                <Text style={styles.themeBtnText}>{THEMES[tKey].name}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.headerTopActions}>
+            <View style={styles.themeSelector}>
+              {Object.keys(THEMES).map(tKey => (
+                <TouchableOpacity 
+                  key={tKey} 
+                  style={[styles.themeBtn, currentThemeKey === tKey && styles.themeBtnActive]}
+                  onPress={() => setCurrentThemeKey(tKey)}
+                >
+                  <Text style={styles.themeBtnText}>{THEMES[tKey].name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.syncBtn} onPress={forceCloudSync}>
+              <Text style={styles.syncBtnText}>🔄 Actualizar</Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={[styles.headerSubtitle, { color: theme.headerSub }]}>Programación Autónoma de Maestros</Text>
@@ -656,15 +653,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
   },
+  headerTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
   themeSelector: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: 8,
+    gap: 4,
   },
   themeBtn: {
     backgroundColor: 'rgba(255,255,255,0.25)',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
   },
@@ -673,7 +676,18 @@ const styles = StyleSheet.create({
   },
   themeBtnText: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  syncBtn: {
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  syncBtnText: {
+    color: '#ffffff',
+    fontSize: 10,
     fontWeight: 'bold',
   },
   headerSubtitle: {
