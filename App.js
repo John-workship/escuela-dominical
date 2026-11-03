@@ -209,7 +209,7 @@ export default function App() {
         .maybeSingle();
 
       if (error) {
-        console.error('Error al conectar con Supabase (verifica tus Environment Variables en Vercel):', error);
+        console.error('Error al conectar con Supabase:', error);
       }
 
       if (data && data.data) {
