@@ -47,8 +47,8 @@ const customStorage = {
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: customStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    autoRefreshToken: false,
+    persistSession: false,
     detectSessionInUrl: false,
   },
 });
@@ -221,11 +221,15 @@ export default function App() {
         .eq('id', '1')
         .maybeSingle();
 
+      if (error) {
+        console.error('Error en fetchCloudState:', error.message);
+      }
+
       if (data && data.data) {
         setAppState(data.data);
       }
     } catch (err) {
-      console.log('Error al cargar estado de Supabase:', err);
+      console.log('Excepción al cargar estado de Supabase:', err);
     }
   };
 
@@ -238,6 +242,8 @@ export default function App() {
       
       if (error) {
         console.error('Error al guardar en Supabase:', error.message);
+      } else {
+        console.log('Guardado exitoso en Supabase');
       }
     } catch (error) {
       console.error('Excepción al sincronizar:', error);
@@ -663,7 +669,7 @@ const styles = StyleSheet.create({
   },
   headerTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-width',
+    justifyContent: 'space-between',
     alignItems: 'center',
     width: '100%',
     marginBottom: 4,
