@@ -22,6 +22,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
 
+// Clave con versión para invalidar cachés antiguos en navegadores móviles automáticamente
+const STORAGE_KEY = 'ministerio_infantil_data_v3';
+
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
   let date = new Date();
@@ -156,6 +159,7 @@ export default function App() {
       }
     }
 
+    // Carga estricta forzada desde la nube al iniciar
     forceCloudSync();
 
     const channel = supabase
@@ -182,10 +186,10 @@ export default function App() {
       const jsonValue = JSON.stringify(dataToStore);
       if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') {
-          localStorage.setItem('escuela_dominical_local', jsonValue);
+          localStorage.setItem(STORAGE_KEY, jsonValue);
         }
       } else {
-        AsyncStorage.setItem('escuela_dominical_local', jsonValue).catch(() => {});
+        AsyncStorage.setItem(STORAGE_KEY, jsonValue).catch(() => {});
       }
     } catch (e) {
       console.log('Error guardando local:', e);
@@ -194,21 +198,28 @@ export default function App() {
 
   const forceCloudSync = async () => {
     try {
-      // Forzamos la consulta directa a Supabase ignorando cualquier caché viejo
+      setNotification('☁️ Sincronizando con la nube...');
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
         .eq('id', '1')
         .maybeSingle();
 
+      if (error) {
+        console.error('Error de Supabase:', error);
+      }
+
       if (data && data.data) {
         setAppState(data.data);
         saveLocally(data.data);
-        setNotification('🔄 ¡Sincronizado con la nube!');
-        setTimeout(() => setNotification(''), 3000);
+        setNotification('✨ ¡Datos frescos sincronizados!');
+      } else {
+        setNotification('⚠️ Usando datos locales');
       }
+      setTimeout(() => setNotification(''), 2500);
     } catch (err) {
-      console.log('Error al forzar sincronización:', err);
+      console.log('Excepción al sincronizar:', err);
+      setNotification('');
     }
   };
 
@@ -222,10 +233,10 @@ export default function App() {
         .upsert({ id: '1', data: newState, updated_at: new Date() }, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error al sincronizar con Supabase:', error);
+        console.error('Error al actualizar Supabase:', error);
       }
     } catch (error) {
-      console.error('Excepción al sincronizar con la nube:', error);
+      console.error('Excepción al actualizar la nube:', error);
     }
   };
 
@@ -363,7 +374,7 @@ export default function App() {
             </View>
 
             <TouchableOpacity style={styles.syncBtn} onPress={forceCloudSync}>
-              <Text style={styles.syncBtnText}>🔄 Actualizar</Text>
+              <Text style={styles.syncBtnText}>🔄 Sincronizar</Text>
             </TouchableOpacity>
           </View>
 
