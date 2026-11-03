@@ -22,7 +22,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
 
-const STORAGE_KEY = 'ministerio_infantil_data_v4';
+const STORAGE_KEY = 'ministerio_infantil_data_v5';
 
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
@@ -158,17 +158,17 @@ export default function App() {
       }
     }
 
-    initializeData();
+    fetchAllData();
 
+    // Canal de tiempo real para escuchar cualquier cambio global en la tabla
     const channel = supabase
       .channel('public:domingos_data')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.1' },
+        { event: '*', schema: 'public', table: 'domingos_data' },
         (payload) => {
-          if (payload.new && payload.new.data) {
-            setAppState(payload.new.data);
-            saveLocally(payload.new.data);
+          if (payload.new) {
+            fetchAllData();
           }
         }
       )
@@ -190,13 +190,13 @@ export default function App() {
         AsyncStorage.setItem(STORAGE_KEY, jsonValue).catch(() => {});
       }
     } catch (e) {
-      console.log('Error en almacenamiento local:', e);
+      console.log('Error local:', e);
     }
   };
 
-  const initializeData = async () => {
+  const fetchAllData = async () => {
     try {
-      // 1. Cargar local primero para renderizado instantáneo
+      // Cargar caché local primero para velocidad
       let cachedData = null;
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         cachedData = localStorage.getItem(STORAGE_KEY);
@@ -208,42 +208,59 @@ export default function App() {
         setAppState(JSON.parse(cachedData));
       }
 
-      // 2. Intentar refrescar desde Supabase de forma segura
+      // Consultar todos los registros directamente de Supabase
       const { data, error } = await supabase
         .from('domingos_data')
-        .select('data')
-        .eq('id', '1')
-        .maybeSingle();
+        .select('*');
 
-      if (!error && data && data.data) {
-        setAppState(data.data);
-        saveLocally(data.data);
+      if (!error && data && data.length > 0) {
+        let newSchedule = {};
+        let newTopics = {};
+        let newResources = {};
+
+        data.forEach(row => {
+          if (row.id === '1' && row.data) {
+            // Compatibilidad con estructura anterior
+            if (row.data.schedule) newSchedule = { ...newSchedule, ...row.data.schedule };
+            if (row.data.topics) newTopics = { ...newTopics, ...row.data.topics };
+            if (row.data.resources) newResources = { ...newResources, ...row.data.resources };
+          } else if (row.id && row.type) {
+            // Nueva estructura modular por filas
+            if (row.type === 'schedule') newSchedule[row.id] = row.value;
+            if (row.type === 'topic') newTopics[row.id] = row.value;
+            if (row.type === 'resource') newResources[row.id] = row.value;
+          }
+        });
+
+        const unifiedState = { schedule: newSchedule, topics: newTopics, resources: newResources };
+        setAppState(unifiedState);
+        saveLocally(unifiedState);
       }
     } catch (err) {
-      console.log('Aviso de inicialización:', err);
+      console.log('Error al obtener datos:', err);
     }
   };
 
-  const updateCloudState = async (newState) => {
-    // Actualización optimista inmediata en interfaz y local
-    setAppState(newState);
-    saveLocally(newState);
+  const syncItemToCloud = async (itemId, itemType, itemValue, updatedFullState) => {
+    // Actualización optimista instantánea local
+    setAppState(updatedFullState);
+    saveLocally(updatedFullState);
 
     try {
+      // Guardar registro modular independiente en Supabase para evitar bloqueos
       const { error } = await supabase
         .from('domingos_data')
-        .upsert({ id: '1', data: newState, updated_at: new Date() }, { onConflict: 'id' });
+        .upsert({ id: itemId, type: itemType, value: itemValue, updated_at: new Date() }, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error al sincronizar con Supabase:', error.message);
+        console.error('Error al sincronizar fila:', error.message);
         setNotification('⚠️ Guardado localmente (Sin conexión con la nube)');
-        setTimeout(() => setNotification(''), 3000);
       } else {
-        setNotification('💾 ¡Guardado y sincronizado!');
-        setTimeout(() => setNotification(''), 2000);
+        setNotification('💾 ¡Guardado y sincronizado al instante!');
       }
+      setTimeout(() => setNotification(''), 2500);
     } catch (error) {
-      console.error('Excepción al conectar con la nube:', error);
+      console.error('Excepción en sincronización:', error);
     }
   };
 
@@ -281,9 +298,8 @@ export default function App() {
     const newSchedule = { ...currentSchedule, [key]: selectedName };
     const newState = { ...appState, schedule: newSchedule };
     
-    updateCloudState(newState);
+    syncItemToCloud(key, 'schedule', selectedName, newState);
     setNotification(`🌟 ¡${selectedName} listo para servir!`);
-    setTimeout(() => setNotification(''), 3000);
   };
 
   const handleRemove = (sundayId, classId, roleName) => {
@@ -291,8 +307,9 @@ export default function App() {
     const currentSchedule = appState.schedule || {};
     const newSchedule = { ...currentSchedule };
     delete newSchedule[key];
+    const newState = { ...appState, schedule: newSchedule };
     
-    updateCloudState({ ...appState, schedule: newSchedule });
+    syncItemToCloud(key, 'schedule', null, newState);
   };
 
   const handleSaveTopic = (sundayId, classId) => {
@@ -302,10 +319,9 @@ export default function App() {
 
     const currentTopics = appState.topics || {};
     const newTopics = { ...currentTopics, [key]: topicText.trim() };
-    updateCloudState({ ...appState, topics: newTopics });
+    const newState = { ...appState, topics: newTopics };
     
-    setNotification('🎯 ¡Tema de clase guardado!');
-    setTimeout(() => setNotification(''), 3000);
+    syncItemToCloud(key, 'topic', topicText.trim(), newState);
   };
 
   const handleRemoveTopic = (sundayId, classId) => {
@@ -313,8 +329,9 @@ export default function App() {
     const currentTopics = appState.topics || {};
     const newTopics = { ...currentTopics };
     delete newTopics[key];
+    const newState = { ...appState, topics: newTopics };
     
-    updateCloudState({ ...appState, topics: newTopics });
+    syncItemToCloud(key, 'topic', null, newState);
   };
 
   const handleSaveResource = (sundayId, classId) => {
@@ -324,10 +341,9 @@ export default function App() {
 
     const currentResources = appState.resources || {};
     const newResources = { ...currentResources, [key]: resText.trim() };
-    updateCloudState({ ...appState, resources: newResources });
+    const newState = { ...appState, resources: newResources };
     
-    setNotification('📎 ¡Enlace de material guardado!');
-    setTimeout(() => setNotification(''), 3000);
+    syncItemToCloud(key, 'resource', resText.trim(), newState);
   };
 
   const handleRemoveResource = (sundayId, classId) => {
@@ -335,8 +351,9 @@ export default function App() {
     const currentResources = appState.resources || {};
     const newResources = { ...currentResources };
     delete newResources[key];
+    const newState = { ...appState, resources: newResources };
     
-    updateCloudState({ ...appState, resources: newResources });
+    syncItemToCloud(key, 'resource', null, newState);
   };
 
   const handleOpenLink = (url) => {
@@ -344,7 +361,7 @@ export default function App() {
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
       formattedUrl = 'https://' + formattedUrl;
     }
-    Linking.openURL(formattedUrl).catch((err) => console.error('No se pudo abrir el enlace:', err));
+    Linking.openURL(formattedUrl).catch((err) => console.error('Error abriendo enlace:', err));
   };
 
   const verifyPassword = () => {
@@ -386,7 +403,7 @@ export default function App() {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.syncBtn} onPress={initializeData}>
+            <TouchableOpacity style={styles.syncBtn} onPress={fetchAllData}>
               <Text style={styles.syncBtnText}>🔄 Sincronizar</Text>
             </TouchableOpacity>
           </View>
