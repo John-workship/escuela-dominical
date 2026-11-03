@@ -223,11 +223,17 @@ export default function App() {
     await saveLocally(newState);
 
     try {
-      await supabase
+      // Usamos .update() buscando el id '1' de forma explícita para evitar que falle el upsert en algunos entornos
+      const { error } = await supabase
         .from('domingos_data')
-        .upsert({ id: '1', data: newState, updated_at: new Date() });
+        .update({ data: newState, updated_at: new Date() })
+        .eq('id', '1');
+
+      if (error) {
+        console.error('Error al actualizar Supabase:', error);
+      }
     } catch (error) {
-      console.error('Error al sincronizar con Supabase:', error);
+      console.error('Excepción al sincronizar:', error);
     }
   };
 
