@@ -22,8 +22,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
 
-// Clave con versión para invalidar cachés antiguos en navegadores móviles automáticamente
-const STORAGE_KEY = 'ministerio_infantil_data_v3';
+const STORAGE_KEY = 'ministerio_infantil_data_v4';
 
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
@@ -159,8 +158,7 @@ export default function App() {
       }
     }
 
-    // Carga estricta forzada desde la nube al iniciar
-    forceCloudSync();
+    initializeData();
 
     const channel = supabase
       .channel('public:domingos_data')
@@ -192,38 +190,42 @@ export default function App() {
         AsyncStorage.setItem(STORAGE_KEY, jsonValue).catch(() => {});
       }
     } catch (e) {
-      console.log('Error guardando local:', e);
+      console.log('Error en almacenamiento local:', e);
     }
   };
 
-  const forceCloudSync = async () => {
+  const initializeData = async () => {
     try {
-      setNotification('☁️ Sincronizando con la nube...');
+      // 1. Cargar local primero para renderizado instantáneo
+      let cachedData = null;
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        cachedData = localStorage.getItem(STORAGE_KEY);
+      } else {
+        cachedData = await AsyncStorage.getItem(STORAGE_KEY);
+      }
+
+      if (cachedData) {
+        setAppState(JSON.parse(cachedData));
+      }
+
+      // 2. Intentar refrescar desde Supabase de forma segura
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
         .eq('id', '1')
         .maybeSingle();
 
-      if (error) {
-        console.error('Error de Supabase:', error);
-      }
-
-      if (data && data.data) {
+      if (!error && data && data.data) {
         setAppState(data.data);
         saveLocally(data.data);
-        setNotification('✨ ¡Datos frescos sincronizados!');
-      } else {
-        setNotification('⚠️ Usando datos locales');
       }
-      setTimeout(() => setNotification(''), 2500);
     } catch (err) {
-      console.log('Excepción al sincronizar:', err);
-      setNotification('');
+      console.log('Aviso de inicialización:', err);
     }
   };
 
   const updateCloudState = async (newState) => {
+    // Actualización optimista inmediata en interfaz y local
     setAppState(newState);
     saveLocally(newState);
 
@@ -233,10 +235,15 @@ export default function App() {
         .upsert({ id: '1', data: newState, updated_at: new Date() }, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error al actualizar Supabase:', error);
+        console.error('Error al sincronizar con Supabase:', error.message);
+        setNotification('⚠️ Guardado localmente (Sin conexión con la nube)');
+        setTimeout(() => setNotification(''), 3000);
+      } else {
+        setNotification('💾 ¡Guardado y sincronizado!');
+        setTimeout(() => setNotification(''), 2000);
       }
     } catch (error) {
-      console.error('Excepción al actualizar la nube:', error);
+      console.error('Excepción al conectar con la nube:', error);
     }
   };
 
@@ -270,7 +277,8 @@ export default function App() {
 
   const handleSelectTeacher = (sundayId, classId, roleName, selectedName) => {
     const key = `${sundayId}_${classId}_${roleName}`;
-    const newSchedule = { ...appState.schedule, [key]: selectedName };
+    const currentSchedule = appState.schedule || {};
+    const newSchedule = { ...currentSchedule, [key]: selectedName };
     const newState = { ...appState, schedule: newSchedule };
     
     updateCloudState(newState);
@@ -280,7 +288,8 @@ export default function App() {
 
   const handleRemove = (sundayId, classId, roleName) => {
     const key = `${sundayId}_${classId}_${roleName}`;
-    const newSchedule = { ...appState.schedule };
+    const currentSchedule = appState.schedule || {};
+    const newSchedule = { ...currentSchedule };
     delete newSchedule[key];
     
     updateCloudState({ ...appState, schedule: newSchedule });
@@ -291,7 +300,8 @@ export default function App() {
     const topicText = topicInputs[key];
     if (!topicText || topicText.trim() === '') return;
 
-    const newTopics = { ...appState.topics, [key]: topicText.trim() };
+    const currentTopics = appState.topics || {};
+    const newTopics = { ...currentTopics, [key]: topicText.trim() };
     updateCloudState({ ...appState, topics: newTopics });
     
     setNotification('🎯 ¡Tema de clase guardado!');
@@ -300,7 +310,8 @@ export default function App() {
 
   const handleRemoveTopic = (sundayId, classId) => {
     const key = `${sundayId}_${classId}`;
-    const newTopics = { ...appState.topics };
+    const currentTopics = appState.topics || {};
+    const newTopics = { ...currentTopics };
     delete newTopics[key];
     
     updateCloudState({ ...appState, topics: newTopics });
@@ -311,7 +322,8 @@ export default function App() {
     const resText = resourceInputs[key];
     if (!resText || resText.trim() === '') return;
 
-    const newResources = { ...appState.resources, [key]: resText.trim() };
+    const currentResources = appState.resources || {};
+    const newResources = { ...currentResources, [key]: resText.trim() };
     updateCloudState({ ...appState, resources: newResources });
     
     setNotification('📎 ¡Enlace de material guardado!');
@@ -320,7 +332,8 @@ export default function App() {
 
   const handleRemoveResource = (sundayId, classId) => {
     const key = `${sundayId}_${classId}_res`;
-    const newResources = { ...appState.resources };
+    const currentResources = appState.resources || {};
+    const newResources = { ...currentResources };
     delete newResources[key];
     
     updateCloudState({ ...appState, resources: newResources });
@@ -373,7 +386,7 @@ export default function App() {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.syncBtn} onPress={forceCloudSync}>
+            <TouchableOpacity style={styles.syncBtn} onPress={initializeData}>
               <Text style={styles.syncBtnText}>🔄 Sincronizar</Text>
             </TouchableOpacity>
           </View>
