@@ -22,7 +22,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
 
-const STORAGE_KEY = 'ministerio_infantil_data_v5';
+const STORAGE_KEY = 'ministerio_infantil_data_v6';
 
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
@@ -158,17 +158,17 @@ export default function App() {
       }
     }
 
-    fetchAllData();
+    fetchCloudData();
 
-    // Canal de tiempo real para escuchar cualquier cambio global en la tabla
     const channel = supabase
       .channel('public:domingos_data')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'domingos_data' },
+        { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.1' },
         (payload) => {
-          if (payload.new) {
-            fetchAllData();
+          if (payload.new && payload.new.data) {
+            setAppState(payload.new.data);
+            saveLocally(payload.new.data);
           }
         }
       )
@@ -194,73 +194,52 @@ export default function App() {
     }
   };
 
-  const fetchAllData = async () => {
+  const fetchCloudData = async () => {
     try {
-      // Cargar caché local primero para velocidad
       let cachedData = null;
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         cachedData = localStorage.getItem(STORAGE_KEY);
       } else {
         cachedData = await AsyncStorage.getItem(STORAGE_KEY);
       }
+      if (cachedData) setAppState(JSON.parse(cachedData));
 
-      if (cachedData) {
-        setAppState(JSON.parse(cachedData));
-      }
-
-      // Consultar todos los registros directamente de Supabase
       const { data, error } = await supabase
         .from('domingos_data')
-        .select('*');
+        .select('data')
+        .eq('id', '1')
+        .maybeSingle();
 
-      if (!error && data && data.length > 0) {
-        let newSchedule = {};
-        let newTopics = {};
-        let newResources = {};
-
-        data.forEach(row => {
-          if (row.id === '1' && row.data) {
-            // Compatibilidad con estructura anterior
-            if (row.data.schedule) newSchedule = { ...newSchedule, ...row.data.schedule };
-            if (row.data.topics) newTopics = { ...newTopics, ...row.data.topics };
-            if (row.data.resources) newResources = { ...newResources, ...row.data.resources };
-          } else if (row.id && row.type) {
-            // Nueva estructura modular por filas
-            if (row.type === 'schedule') newSchedule[row.id] = row.value;
-            if (row.type === 'topic') newTopics[row.id] = row.value;
-            if (row.type === 'resource') newResources[row.id] = row.value;
-          }
-        });
-
-        const unifiedState = { schedule: newSchedule, topics: newTopics, resources: newResources };
-        setAppState(unifiedState);
-        saveLocally(unifiedState);
+      if (!error && data && data.data) {
+        setAppState(data.data);
+        saveLocally(data.data);
+        setNotification('✨ Sincronizado con la nube');
+        setTimeout(() => setNotification(''), 2000);
       }
     } catch (err) {
-      console.log('Error al obtener datos:', err);
+      console.log('Error al consultar nube:', err);
     }
   };
 
-  const syncItemToCloud = async (itemId, itemType, itemValue, updatedFullState) => {
-    // Actualización optimista instantánea local
-    setAppState(updatedFullState);
-    saveLocally(updatedFullState);
+  const updateCloudState = async (newState) => {
+    setAppState(newState);
+    saveLocally(newState);
 
     try {
-      // Guardar registro modular independiente en Supabase para evitar bloqueos
       const { error } = await supabase
         .from('domingos_data')
-        .upsert({ id: itemId, type: itemType, value: itemValue, updated_at: new Date() }, { onConflict: 'id' });
+        .upsert({ id: '1', data: newState, updated_at: new Date() }, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error al sincronizar fila:', error.message);
-        setNotification('⚠️ Guardado localmente (Sin conexión con la nube)');
+        console.error('Error Supabase:', error.message);
+        setNotification('⚠️ Guardado local (Error en nube: ' + error.message + ')');
       } else {
-        setNotification('💾 ¡Guardado y sincronizado al instante!');
+        setNotification('💾 ¡Guardado y sincronizado en la nube!');
+        setTimeout(() => setNotification(''), 2500);
       }
-      setTimeout(() => setNotification(''), 2500);
     } catch (error) {
-      console.error('Excepción en sincronización:', error);
+      console.error('Excepción:', error);
+      setNotification('⚠️ Guardado localmente');
     }
   };
 
@@ -298,7 +277,7 @@ export default function App() {
     const newSchedule = { ...currentSchedule, [key]: selectedName };
     const newState = { ...appState, schedule: newSchedule };
     
-    syncItemToCloud(key, 'schedule', selectedName, newState);
+    updateCloudState(newState);
     setNotification(`🌟 ¡${selectedName} listo para servir!`);
   };
 
@@ -309,7 +288,7 @@ export default function App() {
     delete newSchedule[key];
     const newState = { ...appState, schedule: newSchedule };
     
-    syncItemToCloud(key, 'schedule', null, newState);
+    updateCloudState(newState);
   };
 
   const handleSaveTopic = (sundayId, classId) => {
@@ -321,7 +300,7 @@ export default function App() {
     const newTopics = { ...currentTopics, [key]: topicText.trim() };
     const newState = { ...appState, topics: newTopics };
     
-    syncItemToCloud(key, 'topic', topicText.trim(), newState);
+    updateCloudState(newState);
   };
 
   const handleRemoveTopic = (sundayId, classId) => {
@@ -331,7 +310,7 @@ export default function App() {
     delete newTopics[key];
     const newState = { ...appState, topics: newTopics };
     
-    syncItemToCloud(key, 'topic', null, newState);
+    updateCloudState(newState);
   };
 
   const handleSaveResource = (sundayId, classId) => {
@@ -343,7 +322,7 @@ export default function App() {
     const newResources = { ...currentResources, [key]: resText.trim() };
     const newState = { ...appState, resources: newResources };
     
-    syncItemToCloud(key, 'resource', resText.trim(), newState);
+    updateCloudState(newState);
   };
 
   const handleRemoveResource = (sundayId, classId) => {
@@ -353,7 +332,7 @@ export default function App() {
     delete newResources[key];
     const newState = { ...appState, resources: newResources };
     
-    syncItemToCloud(key, 'resource', null, newState);
+    updateCloudState(newState);
   };
 
   const handleOpenLink = (url) => {
@@ -403,7 +382,7 @@ export default function App() {
               ))}
             </View>
 
-            <TouchableOpacity style={styles.syncBtn} onPress={fetchAllData}>
+            <TouchableOpacity style={styles.syncBtn} onPress={fetchCloudData}>
               <Text style={styles.syncBtnText}>🔄 Sincronizar</Text>
             </TouchableOpacity>
           </View>
@@ -848,7 +827,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 4,
   },
-  cultoTitleText: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
+  cultoTitleTest: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
   classBox: {
     borderRadius: 16,
     padding: 16,
@@ -879,7 +858,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#34d399',
   },
-  assignedText: { color: '#065f46', fontWeight: '700', fontSize: 12 },
+  assignedText: {color: '#065f46', fontWeight: '700', fontSize: 12 },
   removeText: { color: '#dc2626', fontSize: 11, fontWeight: '700', textDecorationLine: 'underline' },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   optionButton: { borderWidth: 1.5, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
