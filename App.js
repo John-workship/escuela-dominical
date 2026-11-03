@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
   },
   headerTopRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-width',
     alignItems: 'center',
     width: '100%',
     marginBottom: 4,
