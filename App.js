@@ -22,7 +22,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
 
-const STORAGE_KEY = 'ministerio_infantil_data_v8';
+const STORAGE_KEY = 'ministerio_infantil_data_v9';
 
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
@@ -159,6 +159,27 @@ export default function App() {
     }
 
     fetchCloudData();
+
+    // Suscripción en tiempo real para otros dispositivos
+    const channel = supabase
+      .channel('public:domingos_data')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.1' },
+        (payload) => {
+          if (payload.new && payload.new.data) {
+            setAppState(payload.new.data);
+            saveLocally(payload.new.data);
+            setNotification('⚡ ¡Datos actualizados desde la nube!');
+            setTimeout(() => setNotification(''), 2500);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const saveLocally = (dataToStore) => {
@@ -178,7 +199,7 @@ export default function App() {
 
   const fetchCloudData = async () => {
     try {
-      // 1. Cargar local primero de forma instantánea
+      setNotification('🔄 Sincronizando con Supabase...');
       let cachedData = null;
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         cachedData = localStorage.getItem(STORAGE_KEY);
@@ -187,12 +208,6 @@ export default function App() {
       }
       if (cachedData) setAppState(JSON.parse(cachedData));
 
-      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        setNotification('⚠️ Faltan credenciales de Supabase en Vercel');
-        return;
-      }
-
-      setNotification('🔄 Sincronizando con Supabase...');
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
@@ -201,30 +216,23 @@ export default function App() {
 
       if (error) {
         console.error('Supabase error:', error);
-        setNotification('⚠️ Modo sin conexión (Usando datos locales)');
+        setNotification('⚠️ Modo local activo');
       } else if (data && data.data) {
         setAppState(data.data);
         saveLocally(data.data);
-        setNotification('✨ ¡Sincronizado correctamente!');
+        setNotification('✨ ¡Sincronizado con éxito!');
       }
       setTimeout(() => setNotification(''), 2500);
     } catch (err) {
-      console.log('Error de red al conectar:', err);
-      setNotification('⚠️ Sin conexión a internet (Guardando local)');
-      setTimeout(() => setNotification(''), 3000);
+      console.log('Error de red:', err);
+      setNotification('⚠️ Sin conexión');
+      setTimeout(() => setNotification(''), 2500);
     }
   };
 
   const updateCloudState = async (newState) => {
-    // Actualización optimista inmediata en interfaz y local
     setAppState(newState);
     saveLocally(newState);
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      setNotification('💾 Guardado localmente (Sin URL de Supabase)');
-      setTimeout(() => setNotification(''), 2500);
-      return;
-    }
 
     try {
       const { error } = await supabase
@@ -233,16 +241,15 @@ export default function App() {
 
       if (error) {
         console.error('Error Supabase upsert:', error.message);
-        setNotification('💾 Guardado local (Error nube: ' + error.message + ')');
-        setTimeout(() => setNotification(''), 3500);
+        setNotification('⚠️ Error al guardar en nube: ' + error.message);
       } else {
         setNotification('💾 ¡Guardado y sincronizado en la nube!');
         setTimeout(() => setNotification(''), 2500);
       }
     } catch (error) {
-      console.error('Excepción de red:', error.message);
-      setNotification('💾 Guardado localmente (Fallo de red)');
-      setTimeout(() => setNotification(''), 3000);
+      console.error('Excepción:', error.message);
+      setNotification('⚠️ Guardado localmente');
+      setTimeout(() => setNotification(''), 2500);
     }
   };
 
