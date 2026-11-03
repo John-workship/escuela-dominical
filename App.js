@@ -177,7 +177,7 @@ export default function App() {
   const [notification, setNotification] = useState('');
 
   // -------------------------------------------------------------------
-  // 3. SINCRONIZACIÓN Y CARGA ROBUSTA DESDE SUPABASE
+  // 3. SINCRONIZACIÓN Y CARGA DESDE SUPABASE
   // -------------------------------------------------------------------
   useEffect(() => {
     const monthsData = getSundaysGroupedByMonths();
@@ -218,7 +218,7 @@ export default function App() {
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
-        .limit(1)
+        .eq('id', 'global_state')
         .maybeSingle();
 
       if (data && data.data) {
@@ -232,13 +232,22 @@ export default function App() {
   const updateCloudState = async (newState) => {
     setAppState(newState); 
     try {
-      // Intentar actualizar o insertar utilizando global_state
-      const { error } = await supabase
+      // Usar update primero, si no existe, hacer insert para garantizar persistencia
+      const { data: existing } = await supabase
         .from('domingos_data')
-        .upsert({ id: 'global_state', data: newState, updated_at: new Date() });
-      
-      if (error) {
-        console.error('Error al guardar en Supabase:', error.message);
+        .select('id')
+        .eq('id', 'global_state')
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('domingos_data')
+          .update({ data: newState, updated_at: new Date() })
+          .eq('id', 'global_state');
+      } else {
+        await supabase
+          .from('domingos_data')
+          .insert([{ id: 'global_state', data: newState, updated_at: new Date() }]);
       }
     } catch (error) {
       console.error('Excepción al sincronizar:', error);
