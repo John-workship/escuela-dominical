@@ -156,10 +156,8 @@ export default function App() {
       }
     }
 
-    // Cargar directamente desde Supabase (id = '1')
-    fetchCloudState();
+    loadInitialData();
 
-    // Escuchar cambios en tiempo real desde otros dispositivos
     const channel = supabase
       .channel('schema-db-changes')
       .on(
@@ -168,6 +166,7 @@ export default function App() {
         (payload) => {
           if (payload.new && payload.new.data) {
             setAppState(payload.new.data);
+            saveLocally(payload.new.data);
           }
         }
       )
@@ -178,8 +177,34 @@ export default function App() {
     };
   }, []);
 
-  const fetchCloudState = async () => {
+  const saveLocally = async (dataToStore) => {
     try {
+      const jsonValue = JSON.stringify(dataToStore);
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') localStorage.setItem('escuela_dominical_local', jsonValue);
+      } else {
+        await AsyncStorage.setItem('escuela_dominical_local', jsonValue);
+      }
+    } catch (e) {
+      console.log('Error guardando local:', e);
+    }
+  };
+
+  const loadInitialData = async () => {
+    try {
+      // 1. Cargar local primero para velocidad inmediata
+      let localData = null;
+      if (Platform.OS === 'web') {
+        localData = typeof window !== 'undefined' ? localStorage.getItem('escuela_dominical_local') : null;
+      } else {
+        localData = await AsyncStorage.getItem('escuela_dominical_local');
+      }
+
+      if (localData) {
+        setAppState(JSON.parse(localData));
+      }
+
+      // 2. Traer de Supabase y actualizar
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
@@ -188,26 +213,23 @@ export default function App() {
 
       if (data && data.data) {
         setAppState(data.data);
+        saveLocally(data.data);
       }
     } catch (err) {
-      console.log('Error al cargar de Supabase:', err);
+      console.log('Error al cargar datos:', err);
     }
   };
 
   const updateCloudState = async (newState) => {
     setAppState(newState); 
+    await saveLocally(newState); // Guarda localmente al instante
 
-    // Guardar directamente en la nube para que se vea en cualquier dispositivo
     try {
-      const { error } = await supabase
+      await supabase
         .from('domingos_data')
         .upsert({ id: '1', data: newState, updated_at: new Date() });
-      
-      if (error) {
-        console.error('Error al guardar en Supabase:', error);
-      }
     } catch (error) {
-      console.error('Excepción al sincronizar:', error);
+      console.error('Error al sincronizar con Supabase:', error);
     }
   };
 
