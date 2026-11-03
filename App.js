@@ -158,11 +158,12 @@ export default function App() {
 
     loadInitialData();
 
+    // Canal en tiempo real optimizado para escuchar cambios de otros dispositivos
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel('public:domingos_data')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'domingos_data' },
+        { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.1' },
         (payload) => {
           if (payload.new && payload.new.data) {
             setAppState(payload.new.data);
@@ -223,14 +224,13 @@ export default function App() {
     await saveLocally(newState);
 
     try {
-      // Usamos .update() buscando el id '1' de forma explícita para evitar que falle el upsert en algunos entornos
+      // Forzamos la actualización completa en Supabase con el id '1' asegurando el reemplazo
       const { error } = await supabase
         .from('domingos_data')
-        .update({ data: newState, updated_at: new Date() })
-        .eq('id', '1');
+        .upsert({ id: '1', data: newState, updated_at: new Date() }, { onConflict: 'id' });
 
       if (error) {
-        console.error('Error al actualizar Supabase:', error);
+        console.error('Error al sincronizar con Supabase:', error);
       }
     } catch (error) {
       console.error('Excepción al sincronizar:', error);
@@ -812,7 +812,7 @@ const styles = StyleSheet.create({
   assignedTopicText: { fontWeight: '700', fontSize: 13, flex: 1 },
   topicSaveBtn: { backgroundColor: '#3b82f6', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 6 },
   roleContainer: { marginBottom: 8, padding: 10, borderRadius: 10 },
-  roleTitle: { fontSize: 11, fontWeight: '800', marginBottom: 6 },
+  roleTitle: { fontSize: `11px`, fontWeight: '800', marginBottom: 6 },
   assignedBox: {
     flexDirection: 'row',
     justifyContent: 'space-between',
