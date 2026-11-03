@@ -194,7 +194,6 @@ export default function App() {
 
   const loadInitialData = async () => {
     try {
-      // Intentar cargar local primero para renderizar al instante sin bloqueos
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const localData = localStorage.getItem('escuela_dominical_local');
         if (localData) setAppState(JSON.parse(localData));
@@ -203,12 +202,15 @@ export default function App() {
         if (localData) setAppState(JSON.parse(localData));
       }
 
-      // Luego sincronizar con Supabase en segundo plano
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
         .eq('id', '1')
         .maybeSingle();
+
+      if (error) {
+        console.error('Error al conectar con Supabase (verifica tus Environment Variables en Vercel):', error);
+      }
 
       if (data && data.data) {
         setAppState(data.data);
@@ -220,7 +222,6 @@ export default function App() {
   };
 
   const updateCloudState = async (newState) => {
-    // Actualización optimista inmediata en la interfaz y local
     setAppState(newState);
     saveLocally(newState);
 
@@ -233,7 +234,7 @@ export default function App() {
         console.error('Error al sincronizar con Supabase:', error);
       }
     } catch (error) {
-      console.error('Excepción al sincronizar:', error);
+      console.error('Excepción al sincronizar con la nube:', error);
     }
   };
 
