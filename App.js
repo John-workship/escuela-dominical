@@ -15,47 +15,13 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// -------------------------------------------------------------------
-// 1. CONFIGURACIÓN SUPABASE & ALMACENAMIENTO HÍBRIDO (WEB / MÓVIL)
-// -------------------------------------------------------------------
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ''; 
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const customStorage = {
-  getItem: (key) => {
-    if (Platform.OS === 'web') {
-      return Promise.resolve(typeof window !== 'undefined' ? localStorage.getItem(key) : null);
-    }
-    return AsyncStorage.getItem(key);
-  },
-  setItem: (key, value) => {
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined') localStorage.setItem(key, value);
-      return Promise.resolve();
-    }
-    return AsyncStorage.setItem(key, value);
-  },
-  removeItem: (key) => {
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined') localStorage.removeItem(key);
-      return Promise.resolve();
-    }
-    return AsyncStorage.removeItem(key);
-  },
-};
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    storage: customStorage,
-    autoRefreshToken: false,
-    persistSession: false,
-    detectSessionInUrl: false,
-  },
+  auth: { persistSession: false },
 });
 
-// -------------------------------------------------------------------
-// 2. CONSTANTES Y CONFIGURACIÓN DE LA APP
-// -------------------------------------------------------------------
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
   let date = new Date();
@@ -176,9 +142,6 @@ export default function App() {
   const [passwordError, setPasswordError] = useState('');
   const [notification, setNotification] = useState('');
 
-  // -------------------------------------------------------------------
-  // 3. SINCRONIZACIÓN Y CARGA DESDE SUPABASE (ID: '1')
-  // -------------------------------------------------------------------
   useEffect(() => {
     const monthsData = getSundaysGroupedByMonths();
     setGroupedSundays(monthsData);
@@ -193,66 +156,61 @@ export default function App() {
       }
     }
 
-    fetchCloudState();
-
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'domingos_data' },
-        (payload) => {
-          if (payload.new && payload.new.data) {
-            setAppState(payload.new.data);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // Cargar inicial de local/nube
+    loadInitialData();
   }, []);
 
-  const fetchCloudState = async () => {
+  const loadInitialData = async () => {
     try {
+      // 1. Intentar cargar de localStorage/AsyncStorage primero para respuesta inmediata
+      const localData = Platform.OS === 'web' 
+        ? localStorage.getItem('escuela_dominical_local') 
+        : await AsyncStorage.getItem('escuela_dominical_local');
+
+      if (localData) {
+        setAppState(JSON.parse(localData));
+      }
+
+      // 2. Sincronizar desde Supabase
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
         .eq('id', '1')
         .maybeSingle();
 
-      if (error) {
-        console.error('Error en fetchCloudState:', error.message);
-      }
-
       if (data && data.data) {
         setAppState(data.data);
+        if (Platform.OS === 'web') {
+          localStorage.setItem('escuela_dominical_local', JSON.stringify(data.data));
+        } else {
+          await AsyncStorage.setItem('escuela_dominical_local', JSON.stringify(data.data));
+        }
       }
     } catch (err) {
-      console.log('Excepción al cargar estado de Supabase:', err);
+      console.log('Error cargando datos:', err);
     }
   };
 
   const updateCloudState = async (newState) => {
     setAppState(newState); 
+
+    // Guardado local inmediato para evitar pérdida al refrescar
+    if (Platform.OS === 'web') {
+      localStorage.setItem('escuela_dominical_local', JSON.stringify(newState));
+    } else {
+      await AsyncStorage.setItem('escuela_dominical_local', JSON.stringify(newState));
+    }
+
+    // Guardado en Supabase en segundo plano
     try {
-      const { error } = await supabase
+      await supabase
         .from('domingos_data')
         .upsert({ id: '1', data: newState, updated_at: new Date() });
-      
-      if (error) {
-        console.error('Error al guardar en Supabase:', error.message);
-      } else {
-        console.log('Guardado exitoso en Supabase');
-      }
     } catch (error) {
-      console.error('Excepción al sincronizar:', error);
+      console.error('Error al sincronizar con Supabase:', error);
     }
   };
 
-  // -------------------------------------------------------------------
-  // 4. MANEJADORES DE EVENTOS
-  // -------------------------------------------------------------------
   const getSundayStatusEmoji = (sundayId) => {
     let totalSlots = 0;
     let filledSlots = 0;
