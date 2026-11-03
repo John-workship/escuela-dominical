@@ -9,7 +9,8 @@ import {
   SafeAreaView,
   Platform,
   StatusBar,
-  useWindowDimensions
+  useWindowDimensions,
+  Linking
 } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -332,6 +333,14 @@ export default function App() {
     updateCloudState({ ...appState, resources: newResources });
   };
 
+  const handleOpenLink = (url) => {
+    let formattedUrl = url.trim();
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = 'https://' + formattedUrl;
+    }
+    Linking.openURL(formattedUrl).catch((err) => console.error('No se pudo abrir el enlace:', err));
+  };
+
   const verifyPassword = () => {
     if (passwordInput === ADMIN_PASSWORD) {
       setAdminMode(true);
@@ -556,14 +565,19 @@ export default function App() {
                       )}
                     </View>
 
-                    {/* Material / Audio */}
+                    {/* Material / Audio Interactivo */}
                     <View style={[styles.topicSection, { backgroundColor: theme.cardInner }]}>
                       <Text style={[styles.topicLabel, { color: theme.textSecondary }]}>📎 ENLACE DE MATERIAL / AUDIO:</Text>
                       {currentResource ? (
                         <View style={[styles.assignedTopicBox, { backgroundColor: theme.bgApp }]}>
-                          <Text style={[styles.assignedTopicText, { color: '#2563eb' }]} numberOfLines={1}>
-                            🔗 {currentResource}
-                          </Text>
+                          <TouchableOpacity 
+                            style={{ flex: 1, marginRight: 8 }} 
+                            onPress={() => handleOpenLink(currentResource)}
+                          >
+                            <Text style={[styles.assignedTopicText, { color: '#2563eb', textDecorationLine: 'underline' }]} numberOfLines={1}>
+                              🔗 {currentResource} (Abrir enlace)
+                            </Text>
+                          </TouchableOpacity>
                           {adminMode && (
                             <TouchableOpacity onPress={() => handleRemoveResource(selectedSunday, cls.id)}>
                               <Text style={styles.removeText}>Cambiar</Text>
@@ -745,7 +759,7 @@ const styles = StyleSheet.create({
   cancelBtn: { backgroundColor: '#f1f5f9' },
   cancelBtnText: { color: '#475569', fontWeight: 'bold', fontSize: 13 },
   acceptBtn: { backgroundColor: '#f59e0b' },
-  acceptBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 13 },
+  acceptBtnText: { color: '#ffffff',fontWeight: 'bold', fontSize: 13 },
   notification: {
     backgroundColor: '#10b981',
     padding: 8,
