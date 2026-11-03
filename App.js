@@ -156,22 +156,30 @@ export default function App() {
       }
     }
 
-    // Cargar inicial de local/nube
-    loadInitialData();
+    // Cargar directamente desde Supabase (id = '1')
+    fetchCloudState();
+
+    // Escuchar cambios en tiempo real desde otros dispositivos
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'domingos_data' },
+        (payload) => {
+          if (payload.new && payload.new.data) {
+            setAppState(payload.new.data);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  const loadInitialData = async () => {
+  const fetchCloudState = async () => {
     try {
-      // 1. Intentar cargar de localStorage/AsyncStorage primero para respuesta inmediata
-      const localData = Platform.OS === 'web' 
-        ? localStorage.getItem('escuela_dominical_local') 
-        : await AsyncStorage.getItem('escuela_dominical_local');
-
-      if (localData) {
-        setAppState(JSON.parse(localData));
-      }
-
-      // 2. Sincronizar desde Supabase
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
@@ -180,34 +188,26 @@ export default function App() {
 
       if (data && data.data) {
         setAppState(data.data);
-        if (Platform.OS === 'web') {
-          localStorage.setItem('escuela_dominical_local', JSON.stringify(data.data));
-        } else {
-          await AsyncStorage.setItem('escuela_dominical_local', JSON.stringify(data.data));
-        }
       }
     } catch (err) {
-      console.log('Error cargando datos:', err);
+      console.log('Error al cargar de Supabase:', err);
     }
   };
 
   const updateCloudState = async (newState) => {
     setAppState(newState); 
 
-    // Guardado local inmediato para evitar pérdida al refrescar
-    if (Platform.OS === 'web') {
-      localStorage.setItem('escuela_dominical_local', JSON.stringify(newState));
-    } else {
-      await AsyncStorage.setItem('escuela_dominical_local', JSON.stringify(newState));
-    }
-
-    // Guardado en Supabase en segundo plano
+    // Guardar directamente en la nube para que se vea en cualquier dispositivo
     try {
-      await supabase
+      const { error } = await supabase
         .from('domingos_data')
         .upsert({ id: '1', data: newState, updated_at: new Date() });
+      
+      if (error) {
+        console.error('Error al guardar en Supabase:', error);
+      }
     } catch (error) {
-      console.error('Error al sincronizar con Supabase:', error);
+      console.error('Excepción al sincronizar:', error);
     }
   };
 
