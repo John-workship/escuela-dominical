@@ -192,7 +192,6 @@ export default function App() {
 
   const loadInitialData = async () => {
     try {
-      // 1. Cargar local primero para velocidad inmediata
       let localData = null;
       if (Platform.OS === 'web') {
         localData = typeof window !== 'undefined' ? localStorage.getItem('escuela_dominical_local') : null;
@@ -204,7 +203,6 @@ export default function App() {
         setAppState(JSON.parse(localData));
       }
 
-      // 2. Traer de Supabase y actualizar
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
@@ -222,7 +220,7 @@ export default function App() {
 
   const updateCloudState = async (newState) => {
     setAppState(newState); 
-    await saveLocally(newState); // Guarda localmente al instante
+    await saveLocally(newState);
 
     try {
       await supabase
@@ -351,20 +349,18 @@ export default function App() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bgApp }, containerWebStyle]}>
       <View style={styles.responsiveWrapper}>
         <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
-          <View style={styles.headerTopRow}>
-            <Text style={[styles.headerTitle, { color: theme.headerText }]}>Escuela Dominical</Text>
-            
-            <View style={styles.themeSelector}>
-              {Object.keys(THEMES).map(tKey => (
-                <TouchableOpacity 
-                  key={tKey} 
-                  style={[styles.themeBtn, currentThemeKey === tKey && styles.themeBtnActive]}
-                  onPress={() => setCurrentThemeKey(tKey)}
-                >
-                  <Text style={styles.themeBtnText}>{THEMES[tKey].name.split(' ')[0]}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          <Text style={[styles.headerTitle, { color: theme.headerText }]}>Ministerio Infantil</Text>
+          
+          <View style={styles.themeSelector}>
+            {Object.keys(THEMES).map(tKey => (
+              <TouchableOpacity 
+                key={tKey} 
+                style={[styles.themeBtn, currentThemeKey === tKey && styles.themeBtnActive]}
+                onPress={() => setCurrentThemeKey(tKey)}
+              >
+                <Text style={styles.themeBtnText}>{THEMES[tKey].name}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           <Text style={[styles.headerSubtitle, { color: theme.headerSub }]}>Programación Autónoma de Maestros</Text>
@@ -647,39 +643,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 3,
   },
-  headerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    marginBottom: 4,
-  },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   themeSelector: {
     flexDirection: 'row',
-    gap: 4,
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 8,
   },
   themeBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 8,
   },
   themeBtnActive: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   themeBtnText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 'bold',
   },
   headerSubtitle: {
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 8,
+    textAlign: 'center',
   },
   adminBtn: {
     marginTop: 4,
