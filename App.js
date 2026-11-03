@@ -15,14 +15,15 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ''; 
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+// Credenciales directas integradas para garantizar conectividad total sin fallos de red
+const SUPABASE_URL = 'https://ctgrfytplwtilorayuyn.supabase.co'; 
+const SUPABASE_ANON_KEY = 'sb_publishable_KKxMEZ7U0KAYV-Za8lU8gw_qgLcc79M';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
 
-const STORAGE_KEY = 'ministerio_infantil_data_v9';
+const STORAGE_KEY = 'ministerio_infantil_data_v10';
 
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
@@ -160,7 +161,6 @@ export default function App() {
 
     fetchCloudData();
 
-    // Suscripción en tiempo real para otros dispositivos
     const channel = supabase
       .channel('public:domingos_data')
       .on(
@@ -170,7 +170,7 @@ export default function App() {
           if (payload.new && payload.new.data) {
             setAppState(payload.new.data);
             saveLocally(payload.new.data);
-            setNotification('⚡ ¡Datos actualizados desde la nube!');
+            setNotification('⚡ ¡Actualizado desde la nube!');
             setTimeout(() => setNotification(''), 2500);
           }
         }
