@@ -21,7 +21,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || ''; 
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Adapter de almacenamiento condicional según la plataforma
 const customStorage = {
   getItem: (key) => {
     if (Platform.OS === 'web') {
@@ -164,7 +163,6 @@ export default function App() {
   const [selectedSundayFullObj, setSelectedSundayFullObj] = useState(null);
   const [openMonths, setOpenMonths] = useState({});
 
-  // Estados de datos principales
   const [appState, setAppState] = useState({ schedule: {}, topics: {}, resources: {} });
   
   const [topicInputs, setTopicInputs] = useState({});
@@ -179,7 +177,7 @@ export default function App() {
   const [notification, setNotification] = useState('');
 
   // -------------------------------------------------------------------
-  // 3. SINCRONIZACIÓN EN TIEMPO REAL CON SUPABASE
+  // 3. SINCRONIZACIÓN Y CARGA DESDE SUPABASE
   // -------------------------------------------------------------------
   useEffect(() => {
     const monthsData = getSundaysGroupedByMonths();
@@ -195,15 +193,13 @@ export default function App() {
       }
     }
 
-    // Cargar datos iniciales desde la nube
     fetchCloudState();
 
-    // Suscribirse a cambios en tiempo real (WebSockets)
     const channel = supabase
       .channel('schema-db-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.global_state' },
+        { event: '*', schema: 'public', table: 'domingos_data' },
         (payload) => {
           if (payload.new && payload.new.data) {
             setAppState(payload.new.data);
@@ -223,24 +219,28 @@ export default function App() {
         .from('domingos_data')
         .select('data')
         .eq('id', 'global_state')
-        .single();
+        .maybeSingle();
 
       if (data && data.data) {
         setAppState(data.data);
       }
     } catch (err) {
-      console.log('Cargando estado local...', err);
+      console.log('Error al cargar estado de Supabase:', err);
     }
   };
 
   const updateCloudState = async (newState) => {
-    setAppState(newState); // Actualizar inmediatamente la UI local
+    setAppState(newState); 
     try {
-      await supabase
+      const { error } = await supabase
         .from('domingos_data')
         .upsert({ id: 'global_state', data: newState, updated_at: new Date() });
+      
+      if (error) {
+        console.error('Error al guardar en Supabase:', error.message);
+      }
     } catch (error) {
-      console.error('Error al sincronizar con Supabase:', error);
+      console.error('Excepción al sincronizar:', error);
     }
   };
 
@@ -354,7 +354,6 @@ export default function App() {
     }
   };
 
-  // Estilo dinámico de fondo adaptado para Web y Móvil
   const containerWebStyle = Platform.OS === 'web' ? {
     backgroundImage: currentThemeKey === 'infantil' 
       ? 'radial-gradient(#fde68a 1px, transparent 1px)' 
@@ -365,7 +364,6 @@ export default function App() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bgApp }, containerWebStyle]}>
       <View style={styles.responsiveWrapper}>
-        {/* Header */}
         <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
           <View style={styles.headerTopRow}>
             <Text style={[styles.headerTitle, { color: theme.headerText }]}>Escuela Dominical</Text>
@@ -410,7 +408,6 @@ export default function App() {
           )}
         </View>
 
-        {/* Modal de Contraseña */}
         {showPasswordModal && (
           <View style={styles.modalOverlay}>
             <View style={styles.modalBox}>
@@ -457,7 +454,6 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <Text style={[styles.sectionLabel, { color: theme.textPrimary }]}>📅 Selecciona por Mes y Domingo:</Text>
 
-          {/* Acordeón de Meses */}
           <View style={styles.accordionContainer}>
             {Object.keys(groupedSundays).map(monthName => {
               const isOpen = openMonths[monthName];
@@ -506,7 +502,6 @@ export default function App() {
             })}
           </View>
 
-          {/* Listado de Clases */}
           {selectedSunday && (
             <View style={styles.classesContainer}>
               <View style={[styles.cultoBoxTitle, { backgroundColor: theme.tabBg, borderColor: theme.tabSelectedBg }]}>
@@ -534,7 +529,6 @@ export default function App() {
                   >
                     <Text style={[styles.className, { color: cardBorderColor }]}>{cls.name}</Text>
                     
-                    {/* Tema de la Clase */}
                     <View style={[styles.topicSection, { backgroundColor: theme.cardInner }]}>
                       <Text style={[styles.topicLabel, { color: theme.textSecondary }]}>📖 TEMA / LECCIÓN:</Text>
                       {currentTopic ? (
@@ -565,7 +559,6 @@ export default function App() {
                       )}
                     </View>
 
-                    {/* Material / Audio Interactivo */}
                     <View style={[styles.topicSection, { backgroundColor: theme.cardInner }]}>
                       <Text style={[styles.topicLabel, { color: theme.textSecondary }]}>📎 ENLACE DE MATERIAL / AUDIO:</Text>
                       {currentResource ? (
@@ -603,7 +596,6 @@ export default function App() {
                       )}
                     </View>
 
-                    {/* Roles */}
                     {cls.roles.map(roleName => {
                       const key = `${selectedSunday}_${cls.id}_${roleName}`;
                       const assigned = appState.schedule ? appState.schedule[key] : undefined;
@@ -759,7 +751,7 @@ const styles = StyleSheet.create({
   cancelBtn: { backgroundColor: '#f1f5f9' },
   cancelBtnText: { color: '#475569', fontWeight: 'bold', fontSize: 13 },
   acceptBtn: { backgroundColor: '#f59e0b' },
-  acceptBtnText: { color: '#ffffff',fontWeight: 'bold', fontSize: 13 },
+  acceptBtnText: { color: '#ffffff', fontWeight: 'bold', fontSize: 13 },
   notification: {
     backgroundColor: '#10b981',
     padding: 8,
