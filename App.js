@@ -158,7 +158,6 @@ export default function App() {
 
     loadInitialData();
 
-    // Canal en tiempo real optimizado para escuchar cambios de otros dispositivos
     const channel = supabase
       .channel('public:domingos_data')
       .on(
@@ -193,17 +192,6 @@ export default function App() {
 
   const loadInitialData = async () => {
     try {
-      let localData = null;
-      if (Platform.OS === 'web') {
-        localData = typeof window !== 'undefined' ? localStorage.getItem('escuela_dominical_local') : null;
-      } else {
-        localData = await AsyncStorage.getItem('escuela_dominical_local');
-      }
-
-      if (localData) {
-        setAppState(JSON.parse(localData));
-      }
-
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
@@ -213,6 +201,16 @@ export default function App() {
       if (data && data.data) {
         setAppState(data.data);
         saveLocally(data.data);
+      } else {
+        let localData = null;
+        if (Platform.OS === 'web') {
+          localData = typeof window !== 'undefined' ? localStorage.getItem('escuela_dominical_local') : null;
+        } else {
+          localData = await AsyncStorage.getItem('escuela_dominical_local');
+        }
+        if (localData) {
+          setAppState(JSON.parse(localData));
+        }
       }
     } catch (err) {
       console.log('Error al cargar datos:', err);
@@ -224,7 +222,6 @@ export default function App() {
     await saveLocally(newState);
 
     try {
-      // Forzamos la actualización completa en Supabase con el id '1' asegurando el reemplazo
       const { error } = await supabase
         .from('domingos_data')
         .upsert({ id: '1', data: newState, updated_at: new Date() }, { onConflict: 'id' });
@@ -812,7 +809,7 @@ const styles = StyleSheet.create({
   assignedTopicText: { fontWeight: '700', fontSize: 13, flex: 1 },
   topicSaveBtn: { backgroundColor: '#3b82f6', justifyContent: 'center', paddingHorizontal: 12, borderRadius: 6 },
   roleContainer: { marginBottom: 8, padding: 10, borderRadius: 10 },
-  roleTitle: { fontSize: `11px`, fontWeight: '800', marginBottom: 6 },
+  roleTitle: { fontSize: 11, fontWeight: '800', marginBottom: 6 },
   assignedBox: {
     flexDirection: 'row',
     justifyContent: 'space-between',
