@@ -22,7 +22,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false },
 });
 
-const STORAGE_KEY = 'ministerio_infantil_data_v6';
+const STORAGE_KEY = 'ministerio_infantil_data_v7';
 
 const getSundaysGroupedByMonths = () => {
   const monthsMap = {};
@@ -159,24 +159,6 @@ export default function App() {
     }
 
     fetchCloudData();
-
-    const channel = supabase
-      .channel('public:domingos_data')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.1' },
-        (payload) => {
-          if (payload.new && payload.new.data) {
-            setAppState(payload.new.data);
-            saveLocally(payload.new.data);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   const saveLocally = (dataToStore) => {
@@ -196,6 +178,7 @@ export default function App() {
 
   const fetchCloudData = async () => {
     try {
+      setNotification('🔄 Sincronizando con Supabase...');
       let cachedData = null;
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         cachedData = localStorage.getItem(STORAGE_KEY);
@@ -213,11 +196,14 @@ export default function App() {
       if (!error && data && data.data) {
         setAppState(data.data);
         saveLocally(data.data);
-        setNotification('✨ Sincronizado con la nube');
-        setTimeout(() => setNotification(''), 2000);
+        setNotification('✨ ¡Sincronizado correctamente!');
+      } else {
+        setNotification('⚠️ Usando datos locales');
       }
+      setTimeout(() => setNotification(''), 2500);
     } catch (err) {
       console.log('Error al consultar nube:', err);
+      setNotification('');
     }
   };
 
@@ -232,7 +218,7 @@ export default function App() {
 
       if (error) {
         console.error('Error Supabase:', error.message);
-        setNotification('⚠️ Guardado local (Error en nube: ' + error.message + ')');
+        setNotification('⚠️ Error al guardar en la nube: ' + error.message);
       } else {
         setNotification('💾 ¡Guardado y sincronizado en la nube!');
         setTimeout(() => setNotification(''), 2500);
@@ -827,7 +813,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 4,
   },
-  cultoTitleTest: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
+  cultoTitleText: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
   classBox: {
     borderRadius: 16,
     padding: 16,
@@ -858,7 +844,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#34d399',
   },
-  assignedText: {color: '#065f46', fontWeight: '700', fontSize: 12 },
+  assignedText: { color: '#065f46', fontWeight: '700', fontSize: 12 },
   removeText: { color: '#dc2626', fontSize: 11, fontWeight: '700', textDecorationLine: 'underline' },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   optionButton: { borderWidth: 1.5, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
