@@ -177,13 +177,15 @@ export default function App() {
     };
   }, []);
 
-  const saveLocally = async (dataToStore) => {
+  const saveLocally = (dataToStore) => {
     try {
       const jsonValue = JSON.stringify(dataToStore);
       if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') localStorage.setItem('escuela_dominical_local', jsonValue);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('escuela_dominical_local', jsonValue);
+        }
       } else {
-        await AsyncStorage.setItem('escuela_dominical_local', jsonValue);
+        AsyncStorage.setItem('escuela_dominical_local', jsonValue).catch(() => {});
       }
     } catch (e) {
       console.log('Error guardando local:', e);
@@ -192,6 +194,16 @@ export default function App() {
 
   const loadInitialData = async () => {
     try {
+      // Intentar cargar local primero para renderizar al instante sin bloqueos
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const localData = localStorage.getItem('escuela_dominical_local');
+        if (localData) setAppState(JSON.parse(localData));
+      } else {
+        const localData = await AsyncStorage.getItem('escuela_dominical_local');
+        if (localData) setAppState(JSON.parse(localData));
+      }
+
+      // Luego sincronizar con Supabase en segundo plano
       const { data, error } = await supabase
         .from('domingos_data')
         .select('data')
@@ -201,25 +213,16 @@ export default function App() {
       if (data && data.data) {
         setAppState(data.data);
         saveLocally(data.data);
-      } else {
-        let localData = null;
-        if (Platform.OS === 'web') {
-          localData = typeof window !== 'undefined' ? localStorage.getItem('escuela_dominical_local') : null;
-        } else {
-          localData = await AsyncStorage.getItem('escuela_dominical_local');
-        }
-        if (localData) {
-          setAppState(JSON.parse(localData));
-        }
       }
     } catch (err) {
-      console.log('Error al cargar datos:', err);
+      console.log('Error al cargar datos iniciales:', err);
     }
   };
 
   const updateCloudState = async (newState) => {
-    setAppState(newState); 
-    await saveLocally(newState);
+    // Actualización optimista inmediata en la interfaz y local
+    setAppState(newState);
+    saveLocally(newState);
 
     try {
       const { error } = await supabase
