@@ -126,6 +126,8 @@ const CLASSES_CONFIG = [
 const ADMIN_PASSWORD = '1234';
 
 export default function App() {
+  const [currentView, setCurrentView] = useState('landing');
+
   const { width } = useWindowDimensions();
   const [groupedSundays, setGroupedSundays] = useState({});
   const [selectedSunday, setSelectedSunday] = useState('');
@@ -367,16 +369,108 @@ export default function App() {
   };
 
   const containerWebStyle = Platform.OS === 'web' ? {
-    backgroundImage: currentThemeKey === 'infantil' 
-      ? 'radial-gradient(#fde68a 1px, transparent 1px)' 
+    backgroundImage: currentThemeKey === 'infantil' || currentView === 'landing'
+      ? 'radial-gradient(#fde68a 1.5px, transparent 1.5px)' 
       : 'none',
-    backgroundSize: '16px 16px'
+    backgroundSize: '24px 24px'
   } : {};
 
+  // VISTA 1: MENÚ DE INICIO (LANDING PAGE INFANTIL)
+  if (currentView === 'landing') {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: '#fffbeb' }, containerWebStyle]}>
+        <View style={styles.responsiveWrapper}>
+          
+          <View style={styles.landingHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ fontSize: 28 }}>🎨</Text>
+              <Text style={styles.landingBrand}>Ministerio Infantil</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.landingTopBtn}
+              onPress={() => setCurrentView('app')}
+            >
+              <Text style={styles.landingTopBtnText}>✨ Entrar a la App</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.landingScroll}>
+            <View style={styles.heroBox}>
+              <View style={styles.badgePill}>
+                <Text style={styles.badgePillText}>🌟 ¡Bienvenidos Maestros y Amigos! 🌟</Text>
+              </View>
+
+              <Text style={styles.heroTitle}>
+                Cultivando el futuro con <Text style={{ color: '#d97706', textDecorationLine: 'underline' }}>amor y fe</Text>
+              </Text>
+
+              <Text style={styles.heroSubtitle}>
+                Portal oficial de coordinación. Organiza tus clases, diviértete enseñando y mantén todo sincronizado en tiempo real.
+              </Text>
+
+              <TouchableOpacity 
+                style={styles.mainCtaBtn}
+                onPress={() => setCurrentView('app')}
+              >
+                <Text style={styles.mainCtaText}>🚀 Entrar a la Programación</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* ZONA INFANTIL CON MUÑECOS Y PERSONAJES (REEMPLAZO DE TARJETAS TÉCNICAS) */}
+            <View style={styles.kidsBannerContainer}>
+              <Text style={styles.kidsBannerTitle}>🧸 Nuestros Pequeños Campeones 🎈</Text>
+              
+              <View style={styles.dollsRow}>
+                <View style={styles.dollCard}>
+                  <Text style={styles.dollEmoji}>👶🍼</Text>
+                  <Text style={styles.dollName}>Cuna</Text>
+                  <Text style={styles.dollDesc}>Bebés llenos de amor</Text>
+                </View>
+
+                <View style={styles.dollCard}>
+                  <Text style={styles.dollEmoji}>🎨🖍️</Text>
+                  <Text style={styles.dollName}>Párvulos</Text>
+                  <Text style={styles.dollDesc}>Arte y risas</Text>
+                </View>
+
+                <View style={styles.dollCard}>
+                  <Text style={styles.dollEmoji}>📖✨</Text>
+                  <Text style={styles.dollName}>Primarios</Text>
+                  <Text style={styles.dollDesc}>Historias bíblicas</Text>
+                </View>
+
+                <View style={styles.dollCard}>
+                  <Text style={styles.dollEmoji}>🔥🎸</Text>
+                  <Text style={styles.dollName}>Pre-Teens</Text>
+                  <Text style={styles.dollDesc}>Liderazgo y fe</Text>
+                </View>
+              </View>
+            </View>
+
+          </ScrollView>
+
+          <View style={styles.landingFooter}>
+            <Text style={styles.footerText}>© 2026 Ministerio Infantil — Con amor para los niños.</Text>
+          </View>
+
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // VISTA 2: APLICACIÓN PRINCIPAL DE PROGRAMACIÓN
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bgApp }, containerWebStyle]}>
       <View style={styles.responsiveWrapper}>
         <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
+          
+          <TouchableOpacity 
+            style={styles.backToHomeBtn}
+            onPress={() => setCurrentView('landing')}
+          >
+            <Text style={styles.backToHomeText}>🏠 Volver al Inicio</Text>
+          </TouchableOpacity>
+
           <Text style={[styles.headerTitle, { color: theme.headerText }]}>Ministerio Infantil</Text>
           
           <View style={styles.headerTopActions}>
@@ -670,6 +764,160 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     flex: 1,
   },
+  // Estilos Landing Page
+  landingHeader: {
+    width: '100%',
+    backgroundColor: '#fbbf24',
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    elevation: 3,
+  },
+  landingBrand: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#78350f',
+  },
+  landingTopBtn: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    elevation: 2,
+  },
+  landingTopBtnText: {
+    color: '#78350f',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  landingScroll: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  heroBox: {
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  badgePill: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+  },
+  badgePillText: {
+    color: '#92400e',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 40,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  mainCtaBtn: {
+    backgroundColor: '#f59e0b',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 16,
+    elevation: 4,
+  },
+  mainCtaText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  // Banner Infantil con Muñecos/Emojis
+  kidsBannerContainer: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#fde047',
+    alignItems: 'center',
+    marginTop: 10,
+    elevation: 2,
+  },
+  kidsBannerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#78350f',
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  dollsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  dollCard: {
+    backgroundColor: '#fffbeb',
+    width: '47%',
+    padding: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fcd34d',
+  },
+  dollEmoji: {
+    fontSize: 32,
+    marginBottom: 6,
+  },
+  dollName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#78350f',
+    marginBottom: 2,
+  },
+  dollDesc: {
+    fontSize: 11,
+    color: '#92400e',
+    textAlign: 'center',
+  },
+  landingFooter: {
+    padding: 16,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  footerText: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  backToHomeBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  backToHomeText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#78350f',
+  },
+  // Estilos app original
   header: {
     padding: 16,
     borderBottomLeftRadius: 20,
