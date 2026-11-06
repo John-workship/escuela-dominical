@@ -375,7 +375,7 @@ export default function App() {
     backgroundSize: '24px 24px'
   } : {};
 
-  // VISTA 1: MENÚ DE INICIO (LANDING PAGE INFANTIL)
+  // VISTA 1: MENÚ DE INICIO (LANDING PAGE LIMPIA SIN BOTÓN SUPERIOR)
   if (currentView === 'landing') {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: '#fffbeb' }, containerWebStyle]}>
@@ -386,12 +386,6 @@ export default function App() {
               <Text style={{ fontSize: 28 }}>🎨</Text>
               <Text style={styles.landingBrand}>Ministerio Infantil</Text>
             </View>
-            <TouchableOpacity 
-              style={styles.landingTopBtn}
-              onPress={() => setCurrentView('app')}
-            >
-              <Text style={styles.landingTopBtnText}>✨ Entrar a la App</Text>
-            </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={styles.landingScroll}>
@@ -416,7 +410,7 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* ZONA INFANTIL CON MUÑECOS Y PERSONAJES (REEMPLAZO DE TARJETAS TÉCNICAS) */}
+            {/* ZONA INFANTIL CON MUÑECOS Y PERSONAJES */}
             <View style={styles.kidsBannerContainer}>
               <Text style={styles.kidsBannerTitle}>🧸 Nuestros Pequeños Campeones 🎈</Text>
               
@@ -770,7 +764,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbbf24',
     padding: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
@@ -780,18 +774,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#78350f',
-  },
-  landingTopBtn: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    elevation: 2,
-  },
-  landingTopBtnText: {
-    color: '#78350f',
-    fontWeight: 'bold',
-    fontSize: 12,
   },
   landingScroll: {
     padding: 20,
@@ -1085,7 +1067,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 4,
   },
-  cultoTitleText: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
+  cultoTitleText: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' /},
   classBox: {
     borderRadius: 16,
     padding: 16,
