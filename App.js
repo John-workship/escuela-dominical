@@ -125,8 +125,18 @@ const CLASSES_CONFIG = [
 
 const ADMIN_PASSWORD = '1234';
 
+// Credenciales de acceso a la programación
+const ACCESS_USER = 'Lider';
+const ACCESS_PASS = '3456';
+
 export default function App() {
   const [currentView, setCurrentView] = useState('landing');
+
+  // Estados para el modal de acceso a la programación
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   const { width } = useWindowDimensions();
   const [groupedSundays, setGroupedSundays] = useState({});
@@ -355,6 +365,19 @@ export default function App() {
     Linking.openURL(formattedUrl).catch((err) => console.error('Error abriendo enlace:', err));
   };
 
+  // Verificación de credenciales de acceso a la programación
+  const verifyLoginAccess = () => {
+    if (loginUser.trim() === ACCESS_USER && loginPass === ACCESS_PASS) {
+      setShowLoginModal(false);
+      setLoginUser('');
+      setLoginPass('');
+      setLoginError('');
+      setCurrentView('app');
+    } else {
+      setLoginError('Usuario o contraseña incorrectos');
+    }
+  };
+
   const verifyPassword = () => {
     if (passwordInput === ADMIN_PASSWORD) {
       setAdminMode(true);
@@ -375,7 +398,7 @@ export default function App() {
     backgroundSize: '24px 24px'
   } : {};
 
-  // VISTA 1: MENÚ DE INICIO (LANDING PAGE CON TÍTULO CENTRADO Y DOBLE MUÑECO)
+  // VISTA 1: MENÚ DE INICIO (LANDING PAGE)
   if (currentView === 'landing') {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: '#fffbeb' }, containerWebStyle]}>
@@ -403,7 +426,12 @@ export default function App() {
 
               <TouchableOpacity 
                 style={styles.mainCtaBtn}
-                onPress={() => setCurrentView('app')}
+                onPress={() => {
+                  setLoginUser('');
+                  setLoginPass('');
+                  setLoginError('');
+                  setShowLoginModal(true);
+                }}
               >
                 <Text style={styles.mainCtaText}>🚀 Entrar a la Programación</Text>
               </TouchableOpacity>
@@ -441,6 +469,53 @@ export default function App() {
             </View>
 
           </ScrollView>
+
+          {/* MODAL DE INICIO DE SESIÓN (USUARIO Y CONTRASEÑA) */}
+          {showLoginModal && (
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalBox}>
+                <Text style={styles.modalEmoji}>🔐</Text>
+                <Text style={styles.modalTitle}>Acceso a Programación</Text>
+                <Text style={styles.modalSubtitle}>Ingresa tus credenciales autorizadas:</Text>
+                
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Usuario (Lider)..."
+                  placeholderTextColor="#94a3b8"
+                  value={loginUser}
+                  onChangeText={setLoginUser}
+                  autoCapitalize="none"
+                />
+
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Contraseña (3456)..."
+                  placeholderTextColor="#94a3b8"
+                  secureTextEntry={true}
+                  value={loginPass}
+                  onChangeText={setLoginPass}
+                />
+
+                {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity 
+                    style={[styles.modalBtn, styles.cancelBtn]} 
+                    onPress={() => setShowLoginModal(false)}
+                  >
+                    <Text style={styles.cancelBtnText}>Cancelar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.modalBtn, styles.acceptBtn]} 
+                    onPress={verifyLoginAccess}
+                  >
+                    <Text style={styles.acceptBtnText}>Ingresar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
 
           <View style={styles.landingFooter}>
             <Text style={styles.footerText}>© 2026 Ministerio Infantil — Con amor para los niños.</Text>
@@ -757,7 +832,6 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     flex: 1,
   },
-  // Estilos Landing Page con cabecera centrada y equilibrada
   landingHeader: {
     width: '100%',
     backgroundColor: '#fbbf24',
@@ -827,7 +901,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
-  // Banner Infantil con Muñecos/Emojis
   kidsBannerContainer: {
     width: '100%',
     backgroundColor: '#ffffff',
@@ -900,7 +973,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#78350f',
   },
-  // Estilos app original
   header: {
     padding: 16,
     borderBottomLeftRadius: 20,
