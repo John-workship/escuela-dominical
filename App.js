@@ -375,7 +375,7 @@ export default function App() {
     backgroundSize: '24px 24px'
   } : {};
 
-  // VISTA 1: MENÚ DE INICIO (LANDING PAGE LIMPIA SIN BOTÓN SUPERIOR)
+  // VISTA 1: MENÚ DE INICIO (LANDING PAGE)
   if (currentView === 'landing') {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: '#fffbeb' }, containerWebStyle]}>
@@ -1067,7 +1067,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginBottom: 4,
   },
-  cultoTitleText: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' /},
+  cultoTitleText: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
   classBox: {
     borderRadius: 16,
     padding: 16,
