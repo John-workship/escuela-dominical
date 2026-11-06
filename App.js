@@ -375,17 +375,16 @@ export default function App() {
     backgroundSize: '24px 24px'
   } : {};
 
-  // VISTA 1: MENÚ DE INICIO (LANDING PAGE)
+  // VISTA 1: MENÚ DE INICIO (LANDING PAGE CON TÍTULO CENTRADO Y DOBLE MUÑECO)
   if (currentView === 'landing') {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: '#fffbeb' }, containerWebStyle]}>
         <View style={styles.responsiveWrapper}>
           
           <View style={styles.landingHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={{ fontSize: 28 }}>🎨</Text>
-              <Text style={styles.landingBrand}>Ministerio Infantil</Text>
-            </View>
+            <Text style={{ fontSize: 24 }}>🎨</Text>
+            <Text style={styles.landingBrand}>Ministerio Infantil</Text>
+            <Text style={{ fontSize: 24 }}>🧸</Text>
           </View>
 
           <ScrollView contentContainerStyle={styles.landingScroll}>
@@ -758,22 +757,24 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     flex: 1,
   },
-  // Estilos Landing Page
+  // Estilos Landing Page con cabecera centrada y equilibrada
   landingHeader: {
     width: '100%',
     backgroundColor: '#fbbf24',
     padding: 16,
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
     elevation: 3,
   },
   landingBrand: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#78350f',
+    textAlign: 'center',
+    flex: 1,
   },
   landingScroll: {
     padding: 20,
