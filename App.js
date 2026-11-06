@@ -125,14 +125,13 @@ const CLASSES_CONFIG = [
 
 const ADMIN_PASSWORD = '1234';
 
-// Credenciales de acceso a la programación
+// Credenciales secretas de acceso
 const ACCESS_USER = 'Lider';
 const ACCESS_PASS = '3456';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('landing');
 
-  // Estados para el modal de acceso a la programación
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
@@ -365,7 +364,6 @@ export default function App() {
     Linking.openURL(formattedUrl).catch((err) => console.error('Error abriendo enlace:', err));
   };
 
-  // Verificación de credenciales de acceso a la programación
   const verifyLoginAccess = () => {
     if (loginUser.trim() === ACCESS_USER && loginPass === ACCESS_PASS) {
       setShowLoginModal(false);
@@ -374,7 +372,7 @@ export default function App() {
       setLoginError('');
       setCurrentView('app');
     } else {
-      setLoginError('Usuario o contraseña incorrectos');
+      setLoginError('ID o Password incorrectos');
     }
   };
 
@@ -387,7 +385,7 @@ export default function App() {
       setNotification('🔓 ¡Modo Coordinador activado!');
       setTimeout(() => setNotification(''), 3000);
     } else {
-      setPasswordError('Clave incorrecta. Prueba con 1234');
+      setPasswordError('Clave incorrecta');
     }
   };
 
@@ -470,17 +468,17 @@ export default function App() {
 
           </ScrollView>
 
-          {/* MODAL DE INICIO DE SESIÓN (USUARIO Y CONTRASEÑA) */}
+          {/* MODAL DE INICIO DE SESIÓN DISCRETO (ID Y PASSWORD) */}
           {showLoginModal && (
             <View style={styles.modalOverlay}>
               <View style={styles.modalBox}>
                 <Text style={styles.modalEmoji}>🔐</Text>
                 <Text style={styles.modalTitle}>Acceso a Programación</Text>
-                <Text style={styles.modalSubtitle}>Ingresa tus credenciales autorizadas:</Text>
+                <Text style={styles.modalSubtitle}>Ingresa tus credenciales:</Text>
                 
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="Usuario (Lider)..."
+                  placeholder="ID..."
                   placeholderTextColor="#94a3b8"
                   value={loginUser}
                   onChangeText={setLoginUser}
@@ -489,7 +487,7 @@ export default function App() {
 
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="Contraseña (3456)..."
+                  placeholder="Password..."
                   placeholderTextColor="#94a3b8"
                   secureTextEntry={true}
                   value={loginPass}
@@ -591,11 +589,11 @@ export default function App() {
             <View style={styles.modalBox}>
               <Text style={styles.modalEmoji}>🔒</Text>
               <Text style={styles.modalTitle}>¡Área de Coordinación!</Text>
-              <Text style={styles.modalSubtitle}>Ingresa la clave secreta (1234):</Text>
+              <Text style={styles.modalSubtitle}>Ingresa la clave secreta:</Text>
               
               <TextInput
                 style={styles.modalInput}
-                placeholder="Contraseña..."
+                placeholder="Password..."
                 placeholderTextColor="#94a3b8"
                 secureTextEntry={true}
                 value={passwordInput}
