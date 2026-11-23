@@ -156,6 +156,8 @@ export default function App() {
   const [groupSettings, setGroupSettings] = useState({});
   const [groupNameDrafts, setGroupNameDrafts] = useState({});
   const [ministryRequests, setMinistryRequests] = useState([]);
+  const [monthAssignments, setMonthAssignments] = useState([]);
+  const [coordinatorAssigneeDrafts, setCoordinatorAssigneeDrafts] = useState({});
   const [needDrafts, setNeedDrafts] = useState({});
   const [resourceDrafts, setResourceDrafts] = useState({});
   const [coordinationNotes, setCoordinationNotes] = useState({});
@@ -360,19 +362,9 @@ export default function App() {
   };
 
   const getSundayStatusEmoji = (sundayId) => {
-    let totalSlots = 0;
-    let filledSlots = 0;
-
-    CLASSES_CONFIG.forEach(cls => {
-      cls.roles.forEach(roleName => {
-        totalSlots++;
-        const key = `${sundayId}_${cls.id}_${roleName}`;
-        if (appState.schedule && appState.schedule[key]) {
-          filledSlots++;
-        }
-      });
-    });
-
+    const assignments = monthAssignments.filter(r => r.service_date === sundayId && r.kind === 'postulacion' && r.status === 'asignada');
+    const filledSlots = new Set(assignments.map(r => `${r.group_id}_${r.assigned_role}`)).size;
+    const totalSlots = CLASSES_CONFIG.length * 2;
     if (filledSlots === 0) return '🙁';
     if (filledSlots === totalSlots) return '😊';
     return '😐';
@@ -452,11 +444,17 @@ export default function App() {
 
   const loadMinistryExtras = async () => {
     if (!authUser) return;
-    const [{ data: groups }, { data: requests }, { data: notes }] = await Promise.all([
+    const monthStart = selectedSunday ? `${selectedSunday.slice(0,7)}-01` : '1900-01-01';
+    const monthEndDate = selectedSunday ? new Date(Number(selectedSunday.slice(0,4)), Number(selectedSunday.slice(5,7)), 1) : new Date(1900,0,2);
+    const monthEnd = `${monthEndDate.getFullYear()}-${String(monthEndDate.getMonth()+1).padStart(2,'0')}-${String(monthEndDate.getDate()).padStart(2,'0')}`;
+    const [{ data: groups }, { data: requests }, { data: notes }, { data: monthly }] = await Promise.all([
       supabase.from('ministerio_infantil_groups').select('id,display_name,age_range').order('id'),
       supabase.from('ministerio_infantil_requests').select('*').eq('service_date', selectedSunday || '1900-01-01').order('created_at', { ascending: false }),
       hasCoordinatorAccess(profileRole)
         ? supabase.from('ministerio_infantil_request_notes').select('request_id,note,updated_at,updated_by')
+        : Promise.resolve({ data: [] }),
+      selectedSunday
+        ? supabase.from('ministerio_infantil_requests').select('id,service_date,group_id,user_id,assigned_role,assigned_name,status,kind').eq('kind','postulacion').eq('status','asignada').gte('service_date',monthStart).lt('service_date',monthEnd)
         : Promise.resolve({ data: [] }),
     ]);
     if (groups) {
@@ -464,6 +462,7 @@ export default function App() {
       setGroupNameDrafts(Object.fromEntries(groups.map(g => [g.id, g.display_name])));
     }
     if (requests) setMinistryRequests(requests);
+    if (monthly) setMonthAssignments(monthly);
     if (notes) setCoordinationNotes(Object.fromEntries(notes.map(n => [n.request_id, n])));
   };
 
@@ -574,6 +573,31 @@ export default function App() {
     setResourceDrafts(p => ({ ...p, [groupId]: '' }));
     await loadMinistryExtras();
     setNotification(kind === 'postulacion' ? '¡Quedaste asignado(a) a este servicio!' : kind === 'necesidad' ? 'Necesidad enviada al responsable.' : 'Enlace compartido con el grupo.');
+  };
+
+  const assignMemberByCoordinator = async (groupId, role, userId) => {
+    if (!hasCoordinatorAccess(profileRole) || !selectedSunday || !userId) return;
+    const alreadyAssigned = ministryRequests.find(r => r.kind === 'postulacion' && r.status === 'asignada' && r.user_id === userId);
+    if (alreadyAssigned) {
+      setNotification('Esta persona ya tiene una asignación en esa fecha.');
+      return;
+    }
+    const occupied = ministryRequests.find(r => r.kind === 'postulacion' && r.status === 'asignada' && r.group_id === groupId && r.assigned_role === role);
+    if (occupied) {
+      setNotification('Ese cupo ya está ocupado.');
+      return;
+    }
+    const { error } = await supabase.from('ministerio_infantil_requests').insert({
+      kind: 'postulacion', service_date: selectedSunday, group_id: groupId, user_id: userId, content: 'Asignación realizada por coordinación'
+    });
+    if (error) {
+      setNotification('No se pudo asignar: ' + error.message);
+      return;
+    }
+    const key = `${selectedSunday}_${groupId}_${role}`;
+    setCoordinatorAssigneeDrafts(p => ({ ...p, [key]: '' }));
+    await loadMinistryExtras();
+    setNotification('Profesor(a) o auxiliar asignado correctamente.');
   };
 
   const updateMinistryRequest = async (requestId, changes) => {
@@ -1192,9 +1216,28 @@ export default function App() {
                               </TouchableOpacity>)}
                             </View>
                           )}
-                          {hasCoordinatorAccess(profileRole) && (classNeeds.length>0 || classResources.length>0 || ministryRequests.some(r=>r.kind==='postulacion'&&r.group_id===cls.id)) && (
+                          {hasCoordinatorAccess(profileRole) && (classNeeds.length>0 || classResources.length>0 || classAssignments.length>0 || true) && (
                             <View style={[styles.topicSection,{backgroundColor:'#eff6ff'}]}>
                               <Text style={{fontWeight:'900',color:'#1e3a8a',marginBottom:7}}>📬 Solicitudes y postulaciones · Coordinación</Text>
+                              {(['profesor','auxiliar']).map(role => {
+                                const slotKey = `${selectedSunday}_${cls.id}_${role}`;
+                                const occupied = classAssignments.some(r => r.assigned_role === role);
+                                const candidates = teamMembers.filter(m => m.active !== false && m.role === role && !ministryRequests.some(r => r.kind === 'postulacion' && r.status === 'asignada' && r.user_id === m.id));
+                                return (
+                                  <View key={role} style={{padding:8,backgroundColor:'#fff',borderRadius:8,marginBottom:7}}>
+                                    <Text style={{fontSize:11,fontWeight:'900',color:'#334155',marginBottom:5}}>Asignar {role === 'profesor' ? 'profesor(a)' : 'auxiliar'}</Text>
+                                    {occupied ? <Text style={{fontSize:11,color:'#64748b'}}>Cupo ocupado.</Text> : candidates.length === 0 ? <Text style={{fontSize:11,color:'#64748b'}}>No hay personas activas disponibles.</Text> : (
+                                      <>
+                                        {candidates.map(m => (
+                                          <TouchableOpacity key={m.id} onPress={() => assignMemberByCoordinator(cls.id,role,m.id)} style={{padding:7,backgroundColor:'#eff6ff',borderRadius:7,marginBottom:4}}>
+                                            <Text style={{fontSize:12,color:'#1d4ed8',fontWeight:'800'}}>＋ {m.display_name || m.email}</Text>
+                                          </TouchableOpacity>
+                                        ))}
+                                      </>
+                                    )}
+                                  </View>
+                                );
+                              })}
                               {classAssignments.map(r=><View key={r.id} style={{padding:7,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
                                 <Text style={{fontSize:12,fontWeight:'800',color:'#1e293b'}}>{r.assigned_role==='profesor'?'Profesor(a)':'Auxiliar'} · {r.assigned_name || teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Integrante'}</Text>
                                 {renderCoordinationNote(r)}
