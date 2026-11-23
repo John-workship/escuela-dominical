@@ -130,7 +130,7 @@ const CLASSES_CONFIG = [
 ];
 
 // El rol se consulta en el perfil protegido de Supabase.
-const hasCoordinatorAccess = (role) => role === 'pastor' || role === 'lideres';
+const hasCoordinatorAccess = (role) => role === 'administrador' || role === 'responsable';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('landing');
@@ -142,6 +142,7 @@ export default function App() {
   const [authUser, setAuthUser] = useState(null);
   const [profileRole, setProfileRole] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
 
   const loadUserRole = async (user) => {
     if (!user?.id) {
@@ -149,7 +150,7 @@ export default function App() {
       setAdminMode(false);
       return null;
     }
-    const { data, error } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+    const { data, error } = await supabase.from('ministerio_infantil_profiles').select('role').eq('id', user.id).maybeSingle();
     if (error || !data?.role) {
       console.warn('No se pudo verificar el rol del usuario:', error?.message);
       setProfileRole(null);
@@ -232,10 +233,10 @@ export default function App() {
 
     fetchCloudData();
     const channel = supabase
-      .channel('authenticated:domingos_data')
+      .channel('authenticated:ministerio_infantil_data')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.1' },
+        { event: '*', schema: 'public', table: 'ministerio_infantil_data', filter: 'id=eq.1' },
         (payload) => {
           if (payload.new && payload.new.data) {
             setAppState(payload.new.data);
@@ -283,7 +284,7 @@ export default function App() {
       if (cachedData) setAppState(JSON.parse(cachedData));
 
       const { data, error } = await supabase
-        .from('domingos_data')
+        .from('ministerio_infantil_data')
         .select('data')
         .eq('id', '1')
         .maybeSingle();
@@ -306,12 +307,12 @@ export default function App() {
 
   const updateCloudState = async (newState) => {
     if (!authUser || !hasCoordinatorAccess(profileRole)) {
-      setNotification('🔒 Solo Pastor o Líder autorizado puede modificar la programación.');
+      setNotification('🔒 Solo administración principal o responsable autorizado puede modificar la programación.');
       return false;
     }
     try {
       const { error } = await supabase
-        .from('domingos_data')
+        .from('ministerio_infantil_data')
         .upsert({ id: '1', data: newState, updated_at: new Date() }, { onConflict: 'id' });
 
       if (error) {
@@ -439,20 +440,62 @@ export default function App() {
     }
     setAuthLoading(true);
     setLoginError('');
+    if (isSignUpMode) {
+      const permittedEmails = ['jhobocal@hotmail.com', 'forever1178@hotmail.com'];
+      if (!permittedEmails.includes(email)) {
+        setLoginError('Este correo aún no está autorizado para Ministerio Infantil.');
+        return;
+      }
+      setAuthLoading(true);
+      setLoginError('');
+      const { data, error } = await supabase.auth.signUp({ email, password: loginPass });
+      setAuthLoading(false);
+      if (error) {
+        setLoginError(error.message || 'No se pudo crear la cuenta.');
+        return;
+      }
+      if (data?.session?.user) {
+        setAuthUser(data.session.user);
+        const role = await loadUserRole(data.session.user);
+        if (!role) {
+          await supabase.auth.signOut();
+          setAuthUser(null);
+          setLoginError('El correo no tiene autorización en Ministerio Infantil.');
+          return;
+        }
+        setIsSignUpMode(false);
+        setShowLoginModal(false);
+        setCurrentView('app');
+        return;
+      }
+      setIsSignUpMode(false);
+      setLoginPass('');
+      setLoginError('Cuenta creada. Revisa el correo para confirmar el acceso y luego inicia sesión.');
+      return;
+    }
+
+    setAuthLoading(true);
+    setLoginError('');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: loginPass });
     setAuthLoading(false);
     if (error || !data?.user) {
       setLoginError('No fue posible validar el acceso. Revisa tus credenciales.');
       return;
     }
-    setAuthUser(data.user);
     const role = await loadUserRole(data.user);
+    if (!role) {
+      await supabase.auth.signOut();
+      setAuthUser(null);
+      setLoginError('Este correo no está habilitado para Ministerio Infantil.');
+      return;
+    }
+    setAuthUser(data.user);
     setAdminMode(hasCoordinatorAccess(role));
     setShowLoginModal(false);
     setLoginUser('');
     setLoginPass('');
     setCurrentView('app');
-    setNotification(hasCoordinatorAccess(role) ? `🔐 Sesión de ${role === 'pastor' ? 'Pastor' : 'Líder'} iniciada.` : 'Acceso de consulta activado.');
+    setNotification(hasCoordinatorAccess(role) ? `🔐 Sesión de ${role === 'administrador' ? 'Administración principal' : 'Responsable del ministerio'} iniciada.` : 'Acceso de consulta activado.');
     setTimeout(() => setNotification(''), 3000);
   };
 
@@ -544,8 +587,8 @@ export default function App() {
             <View style={styles.modalOverlay}>
               <View style={styles.modalBox}>
                 <Text style={styles.modalEmoji}>🔐</Text>
-                <Text style={styles.modalTitle}>Acceso a Programación</Text>
-                <Text style={styles.modalSubtitle}>Ingresa con tu cuenta autorizada:</Text>
+                <Text style={styles.modalTitle}>{isSignUpMode ? 'Crear cuenta inicial' : 'Acceso a Programación'}</Text>
+                <Text style={styles.modalSubtitle}>{isSignUpMode ? 'Registra una de las dos cuentas autorizadas:' : 'Ingresa con tu cuenta autorizada:'}</Text>
                 
                 <TextInput
                   style={styles.modalInput}
@@ -585,9 +628,12 @@ export default function App() {
                     disabled={authLoading}
                     onPress={verifyLoginAccess}
                   >
-                    <Text style={styles.acceptBtnText}>{authLoading ? 'Validando…' : 'Ingresar'}</Text>
+                    <Text style={styles.acceptBtnText}>{authLoading ? 'Procesando…' : isSignUpMode ? 'Crear cuenta' : 'Ingresar'}</Text>
                   </TouchableOpacity>
                 </View>
+                <TouchableOpacity onPress={() => { setIsSignUpMode(!isSignUpMode); setLoginError(''); setLoginPass(''); }} style={{ marginTop: 14, alignSelf: 'center' }}>
+                  <Text style={{ color: '#2563eb', fontWeight: '700' }}>{isSignUpMode ? 'Ya tengo cuenta · Iniciar sesión' : 'Primera vez · Crear cuenta inicial'}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -639,7 +685,7 @@ export default function App() {
           {authUser ? (
             <View style={{ alignItems: 'center', gap: 6 }}>
               <Text style={[styles.adminBtnText, { color: theme.headerText }]}>
-                {adminMode ? `🔐 ${profileRole === 'pastor' ? 'Pastor' : 'Líder'} autorizado` : '👁️ Acceso de solo consulta'}
+                {adminMode ? `🔐 ${profileRole === 'administrador' ? 'Administración principal' : 'Responsable del ministerio'} autorizado` : '👁️ Acceso de solo consulta'}
               </Text>
               <TouchableOpacity
                 style={[styles.adminBtn, { backgroundColor: '#dc2626' }]}
