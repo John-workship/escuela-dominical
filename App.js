@@ -451,7 +451,13 @@ export default function App() {
       }
       setAuthLoading(true);
       setLoginError('');
-      const { data, error } = await supabase.auth.signUp({ email, password: loginPass });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: loginPass,
+        options: {
+          emailRedirectTo: 'https://ministerio-infantil-git-mejora-ministerio-infantil-sound-team.vercel.app/',
+        },
+      });
       setAuthLoading(false);
       if (error) {
         setLoginError(error.message || 'No se pudo crear la cuenta.');
