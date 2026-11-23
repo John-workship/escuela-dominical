@@ -1216,7 +1216,7 @@ export default function App() {
                               </TouchableOpacity>)}
                             </View>
                           )}
-                          {hasCoordinatorAccess(profileRole) && (classNeeds.length>0 || classResources.length>0 || classAssignments.length>0 || true) && (
+                          {hasCoordinatorAccess(profileRole) && (
                             <View style={[styles.topicSection,{backgroundColor:'#eff6ff'}]}>
                               <Text style={{fontWeight:'900',color:'#1e3a8a',marginBottom:7}}>📬 Solicitudes y postulaciones · Coordinación</Text>
                               {(['profesor','auxiliar']).map(role => {
