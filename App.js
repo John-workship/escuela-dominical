@@ -149,6 +149,7 @@ export default function App() {
   const [teamSaving, setTeamSaving] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [teamForm, setTeamForm] = useState({ email: '', display_name: '', role: 'profesor', group_id: 'cuna' });
+  const [editingTeamMember, setEditingTeamMember] = useState(null);
 
   const loadUserRole = async (user) => {
     if (!user?.id) {
@@ -457,16 +458,28 @@ export default function App() {
   };
   const openTeamManager = async () => {
     setShowTeamModal(true);
+    setEditingTeamMember(null);
     setTeamForm({ email: '', display_name: '', role: 'profesor', group_id: 'cuna' });
     await loadTeamMembers();
+  };
+  const editTeamMember = (member) => {
+    if (member.role === 'administrador' || (member.role === 'responsable' && profileRole !== 'administrador')) return;
+    setEditingTeamMember(member);
+    setTeamError('');
+    setTeamForm({ email: member.email || '', display_name: member.display_name || '', role: member.role || 'profesor', group_id: member.group_id || 'cuna' });
+  };
+  const cancelTeamEdit = () => {
+    setEditingTeamMember(null);
+    setTeamForm({ email: '', display_name: '', role: 'profesor', group_id: 'cuna' });
+    setTeamError('');
   };
   const submitTeamMember = async () => {
     if (!teamForm.email.trim() || !teamForm.display_name.trim()) { setTeamError('Escribe el nombre y el correo.'); return; }
     setTeamSaving(true); setTeamError('');
     try {
       const result = await callTeamAdmin({ action: 'assign', email: teamForm.email, display_name: teamForm.display_name, role: teamForm.role, group_id: teamForm.role === 'responsable' ? null : teamForm.group_id });
-      setNotification(result.message || 'Equipo actualizado.');
-      setTeamForm({ email: '', display_name: '', role: 'profesor', group_id: 'cuna' });
+      setNotification(result.message || (editingTeamMember ? 'Cambios guardados.' : 'Equipo actualizado.'));
+      cancelTeamEdit();
       await loadTeamMembers();
       setTimeout(() => setNotification(''), 4000);
     } catch (error) { setTeamError(error.message || 'No se pudo guardar.'); }
@@ -767,19 +780,21 @@ export default function App() {
           <View style={{position:'absolute',top:0,left:0,right:0,bottom:0,zIndex:2000,elevation:20,backgroundColor:'rgba(15,23,42,0.72)',padding:14,justifyContent:'center'}}>
             <ScrollView style={{width:'100%',maxWidth:760,maxHeight:'94%',alignSelf:'center',backgroundColor:'#fff',borderRadius:20,padding:18}} contentContainerStyle={{paddingBottom:20}}>
               <Text style={{fontSize:20,fontWeight:'900',color:'#172554',marginBottom:4}}>👥 Administración del equipo</Text>
-              <Text style={{fontSize:12,color:'#64748b',marginBottom:14}}>{profileRole==='administrador'?'Puedes nombrar o reemplazar al responsable y administrar profesores y auxiliares.':'Puedes administrar profesores y auxiliares. Solo administración principal puede reemplazar al responsable.'}</Text>
+              <Text style={{fontSize:12,color:'#64748b',marginBottom:14}}>{profileRole==='administrador'?'Puedes crear personas, editar sus funciones y grupos, reactivar cuentas y nombrar o reemplazar al responsable.':'Puedes crear y modificar profesores y auxiliares. Solo administración principal puede cambiar al responsable.'}</Text>
+              <Text style={{fontSize:14,fontWeight:'900',color:editingTeamMember?'#1d4ed8':'#1e293b',marginBottom:8}}>{editingTeamMember?'✏️ Editando persona registrada':'➕ Registrar una persona nueva'}</Text>
               <TextInput style={styles.modalInput} placeholder="Nombre completo" value={teamForm.display_name} onChangeText={v=>setTeamForm(p=>({...p,display_name:v}))}/>
-              <TextInput style={styles.modalInput} placeholder="Correo electrónico individual" value={teamForm.email} onChangeText={v=>setTeamForm(p=>({...p,email:v}))} autoCapitalize="none" keyboardType="email-address"/>
+              <TextInput style={[styles.modalInput, editingTeamMember && {backgroundColor:'#f1f5f9',color:'#64748b'}]} placeholder="Correo electrónico individual" value={teamForm.email} onChangeText={v=>setTeamForm(p=>({...p,email:v}))} autoCapitalize="none" keyboardType="email-address" editable={!editingTeamMember}/>
               <Text style={{fontSize:12,fontWeight:'800',color:'#475569',marginBottom:6}}>Función</Text>
               <View style={{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:10}}>
                 {[{value:'profesor',label:'Maestro principal'},{value:'auxiliar',label:'Auxiliar'},...(profileRole==='administrador'?[{value:'responsable',label:'Responsable'}]:[])].map(o=><TouchableOpacity key={o.value} onPress={()=>setTeamForm(p=>({...p,role:o.value}))} style={{padding:8,borderRadius:9,backgroundColor:teamForm.role===o.value?'#dbeafe':'#f1f5f9',borderWidth:1,borderColor:teamForm.role===o.value?'#2563eb':'#e2e8f0'}}><Text style={{color:teamForm.role===o.value?'#1d4ed8':'#475569',fontSize:12,fontWeight:'800'}}>{o.label}</Text></TouchableOpacity>)}
               </View>
               {teamForm.role!=='responsable'&&<><Text style={{fontSize:12,fontWeight:'800',color:'#475569',marginBottom:6}}>Grupo</Text><View style={{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:10}}>{CLASSES_CONFIG.map(g=><TouchableOpacity key={g.id} onPress={()=>setTeamForm(p=>({...p,group_id:g.id}))} style={{padding:8,borderRadius:9,backgroundColor:teamForm.group_id===g.id?'#dcfce7':'#f1f5f9',borderWidth:1,borderColor:teamForm.group_id===g.id?'#16a34a':'#e2e8f0'}}><Text style={{fontSize:11,fontWeight:'800',color:'#334155'}}>{g.name}</Text></TouchableOpacity>)}</View></>}
-              <TouchableOpacity disabled={teamSaving} onPress={submitTeamMember} style={{backgroundColor:'#2563eb',padding:12,borderRadius:10,alignItems:'center',marginBottom:12}}><Text style={{color:'#fff',fontWeight:'900'}}>{teamSaving?'Procesando…':teamForm.role==='responsable'?'Nombrar / reemplazar responsable':'Enviar invitación y asignar permisos'}</Text></TouchableOpacity>
+              <TouchableOpacity disabled={teamSaving} onPress={submitTeamMember} style={{backgroundColor:'#2563eb',padding:12,borderRadius:10,alignItems:'center',marginBottom:editingTeamMember?7:12}}><Text style={{color:'#fff',fontWeight:'900'}}>{teamSaving?'Procesando…':editingTeamMember?'Guardar cambios':teamForm.role==='responsable'?'Nombrar / reemplazar responsable':'Enviar invitación y asignar permisos'}</Text></TouchableOpacity>
+              {editingTeamMember&&<TouchableOpacity disabled={teamSaving} onPress={cancelTeamEdit} style={{backgroundColor:'#e2e8f0',padding:10,borderRadius:10,alignItems:'center',marginBottom:12}}><Text style={{color:'#334155',fontWeight:'800'}}>Cancelar edición</Text></TouchableOpacity>}
               {teamError?<Text style={{color:'#dc2626',fontSize:12,fontWeight:'700',marginBottom:10}}>{teamError}</Text>:null}
               <View style={{height:1,backgroundColor:'#e2e8f0',marginBottom:12}}/>
               <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:8}}><Text style={{fontSize:14,fontWeight:'900',color:'#1e293b'}}>Personas registradas</Text><TouchableOpacity onPress={loadTeamMembers}><Text style={{color:'#2563eb',fontWeight:'800'}}>Actualizar</Text></TouchableOpacity></View>
-              {teamLoading?<Text style={{color:'#64748b',padding:12}}>Cargando equipo…</Text>:teamMembers.map(m=><View key={m.id} style={{padding:11,borderRadius:12,backgroundColor:'#f8fafc',borderWidth:1,borderColor:'#e2e8f0',marginBottom:7}}><View style={{flexDirection:'row',justifyContent:'space-between',gap:8}}><View style={{flex:1}}><Text style={{fontWeight:'900',color:'#172554'}}>{m.display_name||m.email}</Text><Text style={{color:'#64748b',fontSize:11}}>{m.email}</Text><Text style={{color:'#475569',fontSize:11}}>{m.role==='administrador'?'Administración principal':m.role==='responsable'?'Responsable':m.role==='profesor'?'Maestro principal':'Auxiliar'}{m.group_id?' · '+m.group_id:''}{m.active?' · Activo':' · Desactivado'}</Text></View>{m.active&&!['administrador','responsable'].includes(m.role)?<TouchableOpacity disabled={teamSaving} onPress={()=>deactivateTeamMember(m)} style={{padding:7,backgroundColor:'#fee2e2',borderRadius:8}}><Text style={{color:'#b91c1c',fontWeight:'800',fontSize:10}}>Desactivar</Text></TouchableOpacity>:null}</View></View>)}
+              {teamLoading?<Text style={{color:'#64748b',padding:12}}>Cargando equipo…</Text>:teamMembers.map(m=><View key={m.id} style={{padding:11,borderRadius:12,backgroundColor:'#f8fafc',borderWidth:1,borderColor:'#e2e8f0',marginBottom:7}}><View style={{flexDirection:'row',justifyContent:'space-between',gap:8}}><View style={{flex:1}}><Text style={{fontWeight:'900',color:'#172554'}}>{m.display_name||m.email}</Text><Text style={{color:'#64748b',fontSize:11}}>{m.email}</Text><Text style={{color:'#475569',fontSize:11}}>{m.role==='administrador'?'Administración principal':m.role==='responsable'?'Responsable':m.role==='profesor'?'Maestro principal':'Auxiliar'}{m.group_id?' · '+m.group_id:''}{m.active?' · Activo':' · Desactivado'}</Text></View><View style={{flexDirection:'row',gap:6,alignItems:'center'}}>{m.role!=='administrador'&&(m.role!=='responsable'||profileRole==='administrador')?<TouchableOpacity disabled={teamSaving} onPress={()=>editTeamMember(m)} style={{padding:7,backgroundColor:'#dbeafe',borderRadius:8}}><Text style={{color:'#1d4ed8',fontWeight:'800',fontSize:10}}>Editar</Text></TouchableOpacity>:null}{m.active&&!['administrador','responsable'].includes(m.role)?<TouchableOpacity disabled={teamSaving} onPress={()=>deactivateTeamMember(m)} style={{padding:7,backgroundColor:'#fee2e2',borderRadius:8}}><Text style={{color:'#b91c1c',fontWeight:'800',fontSize:10}}>Desactivar</Text></TouchableOpacity>:null}</View></View></View>)}
               <TouchableOpacity onPress={()=>setShowTeamModal(false)} style={{padding:12,backgroundColor:'#e2e8f0',borderRadius:10,alignItems:'center',marginTop:8}}><Text style={{color:'#334155',fontWeight:'900'}}>Cerrar</Text></TouchableOpacity>
             </ScrollView>
           </View>
