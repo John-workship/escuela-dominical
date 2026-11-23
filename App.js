@@ -178,8 +178,6 @@ export default function App() {
       }
     }
 
-    fetchCloudData();
-
     let mounted = true;
     supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return;
@@ -199,8 +197,21 @@ export default function App() {
       }
     });
 
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) {
+      setAppState({ schedule: {}, topics: {}, resources: {} });
+      return undefined;
+    }
+
+    fetchCloudData();
     const channel = supabase
-      .channel('public:domingos_data')
+      .channel('authenticated:domingos_data')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'domingos_data', filter: 'id=eq.1' },
@@ -216,11 +227,9 @@ export default function App() {
       .subscribe();
 
     return () => {
-      mounted = false;
-      authListener.subscription.unsubscribe();
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [authUser]);
 
   const saveLocally = (dataToStore) => {
     try {
@@ -238,6 +247,10 @@ export default function App() {
   };
 
   const fetchCloudData = async () => {
+    if (!authUser) {
+      setNotification('🔒 Inicia sesión para consultar la programación.');
+      return;
+    }
     try {
       setNotification('🔄 Sincronizando con Supabase...');
       let cachedData = null;
