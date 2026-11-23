@@ -1083,6 +1083,14 @@ export default function App() {
                               </View>
                             </>
                           )}
+                          {profileRole === 'auxiliar' && profileGroupId === cls.id && classResources.length > 0 && (
+                            <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
+                              <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>📎 MATERIAL / AUDIO DEL GRUPO</Text>
+                              {classResources.map(r=><TouchableOpacity key={r.id} onPress={()=>handleOpenLink(r.content)} style={{padding:8,backgroundColor:theme.bgApp,borderRadius:8,marginBottom:5}}>
+                                <Text style={{color:'#2563eb',textDecorationLine:'underline',fontSize:12}}>{r.content}</Text>
+                              </TouchableOpacity>)}
+                            </View>
+                          )}
                           {hasCoordinatorAccess(profileRole) && (classNeeds.length>0 || classResources.length>0 || ministryRequests.some(r=>r.kind==='postulacion'&&r.group_id===cls.id)) && (
                             <View style={[styles.topicSection,{backgroundColor:'#eff6ff'}]}>
                               <Text style={{fontWeight:'900',color:'#1e3a8a',marginBottom:7}}>📬 Solicitudes y postulaciones · Coordinación</Text>
