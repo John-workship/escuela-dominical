@@ -23,6 +23,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
+    flowType: 'pkce',
     detectSessionInUrl: true,
     storage: Platform.OS === 'web' ? undefined : AsyncStorage,
   },
@@ -159,9 +160,6 @@ export default function App() {
   const [currentThemeKey, setCurrentThemeKey] = useState('infantil');
   const theme = THEMES[currentThemeKey];
 
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
-  const [passwordError, setPasswordError] = useState('');
   const [notification, setNotification] = useState('');
 
   useEffect(() => {
@@ -470,6 +468,10 @@ export default function App() {
               <TouchableOpacity 
                 style={styles.mainCtaBtn}
                 onPress={() => {
+                  if (authUser) {
+                    setCurrentView('app');
+                    return;
+                  }
                   setLoginUser('');
                   setLoginPass('');
                   setLoginError('');
