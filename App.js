@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
+  Alert,
   Text, 
   View, 
   ScrollView, 
@@ -157,6 +158,8 @@ export default function App() {
   const [ministryRequests, setMinistryRequests] = useState([]);
   const [needDrafts, setNeedDrafts] = useState({});
   const [resourceDrafts, setResourceDrafts] = useState({});
+  const [coordinationNotes, setCoordinationNotes] = useState({});
+  const [coordinationNoteDrafts, setCoordinationNoteDrafts] = useState({});
 
   const loadUserRole = async (user) => {
     if (!user?.id) {
@@ -449,15 +452,54 @@ export default function App() {
 
   const loadMinistryExtras = async () => {
     if (!authUser) return;
-    const [{ data: groups }, { data: requests }] = await Promise.all([
+    const [{ data: groups }, { data: requests }, { data: notes }] = await Promise.all([
       supabase.from('ministerio_infantil_groups').select('id,display_name,age_range').order('id'),
       supabase.from('ministerio_infantil_requests').select('*').eq('service_date', selectedSunday || '1900-01-01').order('created_at', { ascending: false }),
+      hasCoordinatorAccess(profileRole)
+        ? supabase.from('ministerio_infantil_request_notes').select('request_id,note,updated_at,updated_by')
+        : Promise.resolve({ data: [] }),
     ]);
     if (groups) {
       setGroupSettings(Object.fromEntries(groups.map(g => [g.id, g])));
       setGroupNameDrafts(Object.fromEntries(groups.map(g => [g.id, g.display_name])));
     }
     if (requests) setMinistryRequests(requests);
+    if (notes) setCoordinationNotes(Object.fromEntries(notes.map(n => [n.request_id, n])));
+  };
+
+  const saveCoordinationNote = async (requestId) => {
+    if (!hasCoordinatorAccess(profileRole) || !authUser?.id) return;
+    const note = String(coordinationNoteDrafts[requestId] ?? coordinationNotes[requestId]?.note ?? '').trim();
+    if (note.length > 2000) { setNotification('La nota no puede superar 2.000 caracteres.'); return; }
+    const { error } = await supabase.from('ministerio_infantil_request_notes').upsert({
+      request_id: requestId, note, updated_by: authUser.id, updated_at: new Date().toISOString()
+    }, { onConflict: 'request_id' });
+    if (error) { setNotification('No se pudo guardar la nota: ' + error.message); return; }
+    setCoordinationNoteDrafts(p => { const next = { ...p }; delete next[requestId]; return next; });
+    await loadMinistryExtras();
+    setNotification('Nota interna guardada.');
+  };
+
+  const renderCoordinationNote = (request) => {
+    const saved = coordinationNotes[request.id]?.note || '';
+    const draft = coordinationNoteDrafts[request.id] ?? saved;
+    return (
+      <View style={{marginTop:8,padding:8,backgroundColor:'#f8fafc',borderRadius:7,borderWidth:1,borderColor:'#cbd5e1'}}>
+        <Text style={{fontSize:11,fontWeight:'900',color:'#334155',marginBottom:5}}>📝 Nota interna de coordinación</Text>
+        <TextInput
+          style={[styles.modalInput,{textAlign:'left',minHeight:58,marginBottom:6,backgroundColor:'#fff'}]}
+          multiline
+          maxLength={2000}
+          placeholder="Escribe una observación para administración…"
+          value={draft}
+          onChangeText={value=>setCoordinationNoteDrafts(p=>({...p,[request.id]:value}))}
+        />
+        <TouchableOpacity onPress={()=>saveCoordinationNote(request.id)} style={{backgroundColor:'#1d4ed8',padding:8,borderRadius:7,alignItems:'center'}}>
+          <Text style={{color:'#fff',fontWeight:'800',fontSize:11}}>Guardar nota</Text>
+        </TouchableOpacity>
+        {!!coordinationNotes[request.id]?.updated_at && <Text style={{fontSize:10,color:'#64748b',marginTop:4}}>Última actualización: {new Date(coordinationNotes[request.id].updated_at).toLocaleString('es-CO')}</Text>}
+      </View>
+    );
   };
 
   const saveGroupNames = async () => {
@@ -543,9 +585,14 @@ export default function App() {
   };
 
   const deleteMinistryRequest = async (requestId) => {
+    if (!hasCoordinatorAccess(profileRole)) {
+      const ownResource = ministryRequests.find(r => r.id === requestId && r.kind === 'recurso' && r.user_id === authUser?.id);
+      if (!ownResource) { setNotification('No tienes permiso para eliminar esta solicitud.'); return; }
+    }
     const { error } = await supabase.from('ministerio_infantil_requests').delete().eq('id', requestId);
     if (error) { setNotification('No se pudo quitar el registro: ' + error.message); return; }
     await loadMinistryExtras();
+    setNotification('Registro eliminado.');
   };
 
   const handleOpenLink = (url) => {
@@ -1150,6 +1197,7 @@ export default function App() {
                               <Text style={{fontWeight:'900',color:'#1e3a8a',marginBottom:7}}>📬 Solicitudes y postulaciones · Coordinación</Text>
                               {classAssignments.map(r=><View key={r.id} style={{padding:7,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
                                 <Text style={{fontSize:12,fontWeight:'800',color:'#1e293b'}}>{r.assigned_role==='profesor'?'Profesor(a)':'Auxiliar'} · {r.assigned_name || teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Integrante'}</Text>
+                                {renderCoordinationNote(r)}
                                 <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:6}}>
                                   <TouchableOpacity onPress={()=>deleteMinistryRequest(r.id)}><Text style={{color:'#dc2626',fontWeight:'800'}}>Retirar asignación</Text></TouchableOpacity>
                                   {teamMembers.filter(m=>m.active!==false && m.role===r.assigned_role && m.id!==r.user_id).map(m=>(
@@ -1163,6 +1211,8 @@ export default function App() {
                                 <Text style={{fontSize:12,fontWeight:'900',color:'#1e293b'}}>Necesidad · {teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Maestro(a)'}</Text>
                                 <Text style={{fontSize:12,color:'#334155'}}>{r.content}</Text>
                                 <Text style={{fontSize:11,color:'#64748b'}}>Estado: {r.status}</Text>
+                                {renderCoordinationNote(r)}
+                                <TouchableOpacity onPress={()=>deleteMinistryRequest(r.id)} style={{marginTop:7}}><Text style={{color:'#dc2626',fontWeight:'800'}}>Eliminar solicitud</Text></TouchableOpacity>
                                 <View style={{flexDirection:'row',flexWrap:'wrap',gap:9,marginTop:5}}>
                                   {['gestionando','resuelta'].map(st=><TouchableOpacity key={st} onPress={()=>updateMinistryRequest(r.id,{status:st})}><Text style={{color:'#2563eb',fontWeight:'800'}}>{st==='gestionando'?'Gestionando':'Marcar resuelta'}</Text></TouchableOpacity>)}
                                 </View>
@@ -1170,6 +1220,8 @@ export default function App() {
                               {classResources.map(r=><View key={r.id} style={{padding:7,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
                                 <Text style={{fontSize:11,fontWeight:'800',color:'#334155'}}>Material compartido</Text>
                                 <TouchableOpacity onPress={()=>handleOpenLink(r.content)}><Text style={{color:'#2563eb',fontSize:12,textDecorationLine:'underline'}}>{r.content}</Text></TouchableOpacity>
+                                {renderCoordinationNote(r)}
+                                <TouchableOpacity onPress={()=>deleteMinistryRequest(r.id)} style={{marginTop:7}}><Text style={{color:'#dc2626',fontWeight:'800'}}>Eliminar solicitud</Text></TouchableOpacity>
                               </View>)}
                             </View>
                           )}
