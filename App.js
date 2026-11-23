@@ -151,6 +151,7 @@ export default function App() {
   const [teamForm, setTeamForm] = useState({ email: '', display_name: '', role: 'profesor', group_id: 'cuna' });
   const [editingTeamMember, setEditingTeamMember] = useState(null);
   const [profileGroupId, setProfileGroupId] = useState(null);
+  const [profileDisplayName, setProfileDisplayName] = useState('');
   const [groupSettings, setGroupSettings] = useState({});
   const [groupNameDrafts, setGroupNameDrafts] = useState({});
   const [ministryRequests, setMinistryRequests] = useState([]);
@@ -161,10 +162,11 @@ export default function App() {
     if (!user?.id) {
       setProfileRole(null);
       setProfileGroupId(null);
+      setProfileDisplayName('');
       setAdminMode(false);
       return null;
     }
-    const { data, error } = await supabase.from('ministerio_infantil_profiles').select('role,active,group_id').eq('id', user.id).maybeSingle();
+    const { data, error } = await supabase.from('ministerio_infantil_profiles').select('role,active,group_id,display_name').eq('id', user.id).maybeSingle();
     if (error || !data?.role || data.active === false) {
       console.warn('No se pudo verificar el rol del usuario:', error?.message);
       setProfileRole(null);
@@ -173,6 +175,7 @@ export default function App() {
     }
     setProfileRole(data.role);
     setProfileGroupId(data.group_id || null);
+    setProfileDisplayName(data.display_name || user.user_metadata?.full_name || user.email || 'Integrante');
     setAdminMode(hasCoordinatorAccess(data.role));
     return data.role;
   };
@@ -1053,15 +1056,23 @@ export default function App() {
                     {(() => {
                       const myApplication = ministryRequests.find(r => r.kind === 'postulacion' && r.group_id === cls.id && r.user_id === authUser?.id);
                       const classNeeds = ministryRequests.filter(r => r.kind === 'necesidad' && r.group_id === cls.id);
+                      const myNeed = classNeeds.find(r => r.user_id === authUser?.id);
                       const classResources = ministryRequests.filter(r => r.kind === 'recurso' && r.group_id === cls.id);
                       return (
                         <View style={{marginTop:8}}>
                           {(profileRole === 'profesor' || profileRole === 'auxiliar') && (
                             <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
                               <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>🙋 POSTULARSE PARA APOYAR ESTE SERVICIO</Text>
-                              <Text style={{fontSize:12,color:theme.textSecondary,marginBottom:7}}>{myApplication ? 'Tu postulación está registrada: '+myApplication.status : 'Puedes postularte para apoyar este grupo en esta fecha.'}</Text>
+                              <Text style={{fontSize:12,color:theme.textSecondary,marginBottom:7}}>{myApplication ? 'Postulación de '+profileDisplayName+' · '+myApplication.status : 'Puedes postularte para apoyar este grupo en esta fecha.'}</Text>
                               {!myApplication && <TouchableOpacity onPress={()=>createMinistryRequest('postulacion',cls.id)} style={{backgroundColor:'#2563eb',padding:10,borderRadius:8,alignItems:'center'}}><Text style={{color:'#fff',fontWeight:'800'}}>Enviar postulación</Text></TouchableOpacity>}
                               {myApplication?.status==='pendiente' && <TouchableOpacity onPress={()=>deleteMinistryRequest(myApplication.id)} style={{padding:7,alignItems:'center'}}><Text style={styles.removeText}>Retirar postulación</Text></TouchableOpacity>}
+                            </View>
+                          )}
+                          {profileRole === 'profesor' && profileGroupId === cls.id && myNeed && (
+                            <View style={[styles.topicSection,{backgroundColor:'#f5f3ff',borderWidth:1,borderColor:'#c4b5fd'}]}>
+                              <Text style={[styles.topicLabel,{color:'#5b21b6'}]}>🧰 MI SOLICITUD DE MATERIAL DE APOYO</Text>
+                              <Text style={{fontSize:12,color:'#312e81',marginBottom:5}}>{myNeed.content}</Text>
+                              <Text style={{fontSize:11,color:'#6d28d9',fontWeight:'800'}}>Estado: {myNeed.status==='pendiente'?'Pendiente de revisión':myNeed.status==='gestionando'?'En gestión':myNeed.status==='resuelta'?'Atendida':'Rechazada'}</Text>
                             </View>
                           )}
                           {profileRole === 'profesor' && profileGroupId === cls.id && (
