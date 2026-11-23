@@ -487,7 +487,26 @@ export default function App() {
       setNotification(kind === 'necesidad' ? 'Escribe qué necesitas para la clase.' : 'Pega el enlace del material o audio.');
       return;
     }
-    if (kind === 'necesidad') {
+    if (kind === 'postulacion') {
+      const dailyAssignment = ministryRequests.find(r => r.kind === 'postulacion' && r.status === 'asignada' && r.user_id === authUser.id);
+      if (dailyAssignment) {
+        const assignedGroup = groupSettings[dailyAssignment.group_id]?.display_name || dailyAssignment.group_id;
+        setNotification(`Ya estás asignado(a) a ${assignedGroup} en esta fecha. Solo puedes apoyar un grupo por día.`);
+        return;
+      }
+      const occupiedSlot = ministryRequests.find(r => r.kind === 'postulacion' && r.status === 'asignada' && r.group_id === groupId && r.assigned_role === profileRole);
+      if (occupiedSlot) {
+        setNotification(`El cupo de ${profileRole === 'profesor' ? 'profesor' : 'auxiliar'} para este grupo ya está ocupado.`);
+        return;
+      }
+      const { error } = await supabase.from('ministerio_infantil_requests').insert({
+        kind, service_date: selectedSunday, group_id: groupId, user_id: authUser.id, content: clean
+      });
+      if (error) {
+        setNotification(error.message || 'No se pudo completar la asignación.');
+        return;
+      }
+    } else if (kind === 'necesidad') {
       const existingNeed = ministryRequests.find(r => r.kind === 'necesidad' && r.group_id === groupId && r.user_id === authUser.id);
       if (existingNeed) {
         const { error } = await supabase.from('ministerio_infantil_requests').update({
@@ -512,7 +531,7 @@ export default function App() {
     setNeedDrafts(p => ({ ...p, [groupId]: '' }));
     setResourceDrafts(p => ({ ...p, [groupId]: '' }));
     await loadMinistryExtras();
-    setNotification(kind === 'postulacion' ? 'Postulación enviada al responsable.' : kind === 'necesidad' ? 'Necesidad enviada al responsable.' : 'Enlace compartido con el grupo.');
+    setNotification(kind === 'postulacion' ? '¡Quedaste asignado(a) a este servicio!' : kind === 'necesidad' ? 'Necesidad enviada al responsable.' : 'Enlace compartido con el grupo.');
   };
 
   const updateMinistryRequest = async (requestId, changes) => {
@@ -1054,18 +1073,42 @@ export default function App() {
                     </View>
 
                     {(() => {
-                      const myApplication = ministryRequests.find(r => r.kind === 'postulacion' && r.group_id === cls.id && r.user_id === authUser?.id);
+                      const classAssignments = ministryRequests.filter(r => r.kind === 'postulacion' && r.status === 'asignada' && r.group_id === cls.id);
+                      const myApplication = classAssignments.find(r => r.user_id === authUser?.id);
+                      const myDailyAssignment = ministryRequests.find(r => r.kind === 'postulacion' && r.status === 'asignada' && r.user_id === authUser?.id);
+                      const myRoleAssignment = classAssignments.find(r => r.assigned_role === profileRole);
                       const classNeeds = ministryRequests.filter(r => r.kind === 'necesidad' && r.group_id === cls.id);
                       const myNeed = classNeeds.find(r => r.user_id === authUser?.id);
                       const classResources = ministryRequests.filter(r => r.kind === 'recurso' && r.group_id === cls.id);
                       return (
                         <View style={{marginTop:8}}>
+                          {classAssignments.length > 0 && (
+                            <View style={[styles.topicSection,{backgroundColor:'#ecfdf5',borderWidth:1,borderColor:'#a7f3d0'}]}>
+                              <Text style={[styles.topicLabel,{color:'#065f46'}]}>✅ PERSONAL ASIGNADO A ESTE SERVICIO</Text>
+                              {classAssignments.map(r=>(
+                                <Text key={r.id} style={{fontSize:12,color:'#064e3b',marginBottom:3}}>
+                                  {r.assigned_role === 'profesor' ? '👨‍🏫 Profesor(a): ' : '🙋 Auxiliar: '}{r.assigned_name || 'Integrante asignado'}
+                                </Text>
+                              ))}
+                            </View>
+                          )}
                           {(profileRole === 'profesor' || profileRole === 'auxiliar') && (
                             <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
-                              <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>🙋 POSTULARSE PARA APOYAR ESTE SERVICIO</Text>
-                              <Text style={{fontSize:12,color:theme.textSecondary,marginBottom:7}}>{myApplication ? 'Postulación de '+profileDisplayName+' · '+myApplication.status : 'Puedes postularte para apoyar este grupo en esta fecha.'}</Text>
-                              {!myApplication && <TouchableOpacity onPress={()=>createMinistryRequest('postulacion',cls.id)} style={{backgroundColor:'#2563eb',padding:10,borderRadius:8,alignItems:'center'}}><Text style={{color:'#fff',fontWeight:'800'}}>Enviar postulación</Text></TouchableOpacity>}
-                              {myApplication?.status==='pendiente' && <TouchableOpacity onPress={()=>deleteMinistryRequest(myApplication.id)} style={{padding:7,alignItems:'center'}}><Text style={styles.removeText}>Retirar postulación</Text></TouchableOpacity>}
+                              <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>🙋 ASIGNACIÓN PARA APOYAR ESTE SERVICIO</Text>
+                              <Text style={{fontSize:12,color:theme.textSecondary,marginBottom:7}}>
+                                {myApplication
+                                  ? 'Ya quedaste asignado(a) a este grupo en esta fecha.'
+                                  : myDailyAssignment
+                                    ? 'Ya estás asignado(a) a otro grupo en esta fecha. Solo puedes apoyar un grupo por día.'
+                                    : myRoleAssignment
+                                      ? 'El cupo de tu función ya fue ocupado para este grupo.'
+                                      : 'Si te postulas y el cupo está disponible, quedarás asignado(a) automáticamente.'}
+                              </Text>
+                              {!myApplication && !myDailyAssignment && !myRoleAssignment && (
+                                <TouchableOpacity onPress={()=>createMinistryRequest('postulacion',cls.id)} style={{backgroundColor:'#2563eb',padding:10,borderRadius:8,alignItems:'center'}}>
+                                  <Text style={{color:'#fff',fontWeight:'800'}}>Postularme y quedar asignado(a)</Text>
+                                </TouchableOpacity>
+                              )}
                             </View>
                           )}
                           {profileRole === 'profesor' && profileGroupId === cls.id && myNeed && (
@@ -1105,12 +1148,16 @@ export default function App() {
                           {hasCoordinatorAccess(profileRole) && (classNeeds.length>0 || classResources.length>0 || ministryRequests.some(r=>r.kind==='postulacion'&&r.group_id===cls.id)) && (
                             <View style={[styles.topicSection,{backgroundColor:'#eff6ff'}]}>
                               <Text style={{fontWeight:'900',color:'#1e3a8a',marginBottom:7}}>📬 Solicitudes y postulaciones · Coordinación</Text>
-                              {ministryRequests.filter(r=>r.group_id===cls.id && r.kind==='postulacion').map(r=><View key={r.id} style={{padding:7,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
-                                <Text style={{fontSize:12,fontWeight:'800',color:'#1e293b'}}>Postulación · {teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Integrante'} · {r.status}</Text>
-                                {r.status==='pendiente' && <View style={{flexDirection:'row',gap:8,marginTop:5}}>
-                                  <TouchableOpacity onPress={()=>updateMinistryRequest(r.id,{status:'aprobada'})}><Text style={{color:'#15803d',fontWeight:'800'}}>Aprobar</Text></TouchableOpacity>
-                                  <TouchableOpacity onPress={()=>updateMinistryRequest(r.id,{status:'rechazada'})}><Text style={{color:'#dc2626',fontWeight:'800'}}>Rechazar</Text></TouchableOpacity>
-                                </View>}
+                              {classAssignments.map(r=><View key={r.id} style={{padding:7,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
+                                <Text style={{fontSize:12,fontWeight:'800',color:'#1e293b'}}>{r.assigned_role==='profesor'?'Profesor(a)':'Auxiliar'} · {r.assigned_name || teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Integrante'}</Text>
+                                <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginTop:6}}>
+                                  <TouchableOpacity onPress={()=>deleteMinistryRequest(r.id)}><Text style={{color:'#dc2626',fontWeight:'800'}}>Retirar asignación</Text></TouchableOpacity>
+                                  {teamMembers.filter(m=>m.active!==false && m.role===r.assigned_role && m.id!==r.user_id).map(m=>(
+                                    <TouchableOpacity key={m.id} onPress={()=>updateMinistryRequest(r.id,{user_id:m.id,status:'asignada'})}>
+                                      <Text style={{color:'#2563eb',fontWeight:'800'}}>Reemplazar por {m.display_name}</Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
                               </View>)}
                               {classNeeds.map(r=><View key={r.id} style={{padding:8,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
                                 <Text style={{fontSize:12,fontWeight:'900',color:'#1e293b'}}>Necesidad · {teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Maestro(a)'}</Text>
