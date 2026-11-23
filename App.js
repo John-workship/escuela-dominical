@@ -909,12 +909,12 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.headerSubtitle, { color: theme.headerSub }]}>Programación del Ministerio Infantil · {adminMode ? 'Edición autorizada' : 'Solo lectura'}</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.headerSub }]}>Programación del Ministerio Infantil · {adminMode ? 'Edición autorizada' : profileRole === 'profesor' ? 'Profesor(a) · edición según asignación' : profileRole === 'auxiliar' ? 'Auxiliar · consulta según asignación' : 'Solo lectura'}</Text>
           
           {authUser ? (
             <View style={{ alignItems: 'center', gap: 6 }}>
               <Text style={[styles.adminBtnText, { color: theme.headerText }]}>
-                {adminMode ? `🔐 ${profileRole === 'administrador' ? 'Administración principal' : 'Responsable del ministerio'} autorizado` : '👁️ Acceso de solo consulta'}
+                {adminMode ? `🔐 ${profileRole === 'administrador' ? 'Administración principal' : 'Responsable del ministerio'} autorizado` : profileRole === 'profesor' ? '👨‍🏫 Perfil de profesor(a) · herramientas disponibles al quedar asignado(a)' : profileRole === 'auxiliar' ? '🙋 Perfil de auxiliar · consulta disponible al quedar asignado(a)' : '👁️ Acceso de solo consulta'}
               </Text>
               {hasCoordinatorAccess(profileRole) && <TouchableOpacity style={[styles.adminBtn, { backgroundColor: '#2563eb' }]} onPress={openTeamManager}><Text style={styles.adminBtnTextActive}>👥 Gestionar equipo y grupos</Text></TouchableOpacity>}
               <TouchableOpacity
@@ -1158,14 +1158,14 @@ export default function App() {
                               )}
                             </View>
                           )}
-                          {profileRole === 'profesor' && profileGroupId === cls.id && myNeed && (
+                          {profileRole === 'profesor' && myApplication?.assigned_role === 'profesor' && myNeed && (
                             <View style={[styles.topicSection,{backgroundColor:'#f5f3ff',borderWidth:1,borderColor:'#c4b5fd'}]}>
                               <Text style={[styles.topicLabel,{color:'#5b21b6'}]}>🧰 MI SOLICITUD DE MATERIAL DE APOYO</Text>
                               <Text style={{fontSize:12,color:'#312e81',marginBottom:5}}>{myNeed.content}</Text>
                               <Text style={{fontSize:11,color:'#6d28d9',fontWeight:'800'}}>Estado: {myNeed.status==='pendiente'?'Pendiente de revisión':myNeed.status==='gestionando'?'En gestión':myNeed.status==='resuelta'?'Atendida':'Rechazada'}</Text>
                             </View>
                           )}
-                          {profileRole === 'profesor' && profileGroupId === cls.id && (
+                          {profileRole === 'profesor' && myApplication?.assigned_role === 'profesor' && (
                             <>
                               <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
                                 <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>📎 ENLACE DE MATERIAL / AUDIO · MAESTROS(AS)</Text>
@@ -1184,7 +1184,7 @@ export default function App() {
                               </View>
                             </>
                           )}
-                          {profileRole === 'auxiliar' && profileGroupId === cls.id && classResources.length > 0 && (
+                          {profileRole === 'auxiliar' && myApplication?.assigned_role === 'auxiliar' && classResources.length > 0 && (
                             <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
                               <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>📎 MATERIAL / AUDIO DEL GRUPO</Text>
                               {classResources.map(r=><TouchableOpacity key={r.id} onPress={()=>handleOpenLink(r.content)} style={{padding:8,backgroundColor:theme.bgApp,borderRadius:8,marginBottom:5}}>
