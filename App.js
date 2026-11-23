@@ -199,8 +199,13 @@ export default function App() {
       const user = data?.session?.user || null;
       setAuthUser(user);
       if (user) {
-        setCurrentView('app');
-        await loadUserRole(user);
+        const role = await loadUserRole(user);
+        if (role) setCurrentView('app');
+        else {
+          await supabase.auth.signOut();
+          setAuthUser(null);
+          setCurrentView('landing');
+        }
       } else {
         setProfileRole(null);
         setAdminMode(false);
@@ -438,8 +443,6 @@ export default function App() {
       setLoginError('Ingresa tu correo y contraseña.');
       return;
     }
-    setAuthLoading(true);
-    setLoginError('');
     if (isSignUpMode) {
       const permittedEmails = ['jhobocal@hotmail.com', 'forever1178@hotmail.com'];
       if (!permittedEmails.includes(email)) {
