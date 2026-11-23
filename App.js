@@ -1176,42 +1176,8 @@ export default function App() {
                         </View>
                       );
                     })()}
-                    {cls.roles.map(roleName => {
-                      const key = `${selectedSunday}_${cls.id}_${roleName}`;
-                      const assigned = appState.schedule ? appState.schedule[key] : undefined;
-                      const options = roleName === 'Maestro(a)' 
-                        ? ['Maestro(a) 1', 'Maestro(a) 2', 'Maestro(a) 3'] 
-                        : ['Auxiliar 1', 'Auxiliar 2', 'Auxiliar 3'];
+                    {/* Las asignaciones reales se muestran arriba con el nombre registrado de cada persona. */}
 
-                      return (
-                        <View key={roleName} style={[styles.roleContainer, { backgroundColor: theme.cardInner }]}>
-                          <Text style={[styles.roleTitle, { color: theme.textSecondary }]}>👤 {roleName}</Text>
-                          
-                          {assigned ? (
-                            <View style={styles.assignedBox}>
-                              <Text style={styles.assignedText}>🎉 ¡{assigned}!</Text>
-                              {adminMode && (
-                                <TouchableOpacity onPress={() => handleRemove(selectedSunday, cls.id, roleName)}>
-                                  <Text style={styles.removeText}>Cambiar</Text>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          ) : adminMode ? (
-                            <View style={styles.optionsRow}>
-                              {options.map(optionName => (
-                                <TouchableOpacity
-                                  key={optionName}
-                                  style={[styles.optionButton, { backgroundColor: theme.bgApp, borderColor: cardBorderColor }]}
-                                  onPress={() => handleSelectTeacher(selectedSunday, cls.id, roleName, optionName)}
-                                >
-                                  <Text style={[styles.optionButtonText, { color: theme.textPrimary }]}>👉 {optionName}</Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          ) : <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Cupo disponible · asignación pendiente de coordinación.</Text>}
-                        </View>
-                      );
-                    })}
                   </View>
                 );
               })}
