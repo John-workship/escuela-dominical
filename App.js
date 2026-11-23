@@ -484,12 +484,27 @@ export default function App() {
       setNotification(kind === 'necesidad' ? 'Escribe qué necesitas para la clase.' : 'Pega el enlace del material o audio.');
       return;
     }
-    const { error } = await supabase.from('ministerio_infantil_requests').insert({
-      kind, service_date: selectedSunday, group_id: groupId, user_id: authUser.id, content: clean
-    });
-    if (error) {
-      setNotification(error.code === '23505' ? 'Ya existe una postulación o enlace para este grupo y servicio.' : 'No se pudo guardar: ' + error.message);
-      return;
+    if (kind === 'necesidad') {
+      const existingNeed = ministryRequests.find(r => r.kind === 'necesidad' && r.group_id === groupId && r.user_id === authUser.id);
+      if (existingNeed) {
+        const { error } = await supabase.from('ministerio_infantil_requests').update({
+          content: clean, updated_at: new Date().toISOString()
+        }).eq('id', existingNeed.id);
+        if (error) { setNotification('No se pudo actualizar la necesidad: ' + error.message); return; }
+      } else {
+        const { error } = await supabase.from('ministerio_infantil_requests').insert({
+          kind, service_date: selectedSunday, group_id: groupId, user_id: authUser.id, content: clean
+        });
+        if (error) { setNotification('No se pudo guardar la necesidad: ' + error.message); return; }
+      }
+    } else {
+      const { error } = await supabase.from('ministerio_infantil_requests').insert({
+        kind, service_date: selectedSunday, group_id: groupId, user_id: authUser.id, content: clean
+      });
+      if (error) {
+        setNotification(error.code === '23505' ? 'Ya tienes una postulación registrada para este grupo y servicio.' : 'No se pudo guardar: ' + error.message);
+        return;
+      }
     }
     setNeedDrafts(p => ({ ...p, [groupId]: '' }));
     setResourceDrafts(p => ({ ...p, [groupId]: '' }));
@@ -1063,8 +1078,8 @@ export default function App() {
                               </View>
                               <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
                                 <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>🧰 ¿QUÉ NECESITAS PARA DESARROLLAR LA CLASE?</Text>
-                                <TextInput style={[styles.modalInput,{textAlign:'left',minHeight:70}]} multiline placeholder="Materiales, apoyo, recursos, impresiones, equipo…" value={needDrafts[cls.id]||''} onChangeText={v=>setNeedDrafts(p=>({...p,[cls.id]:v}))}/>
-                                <TouchableOpacity onPress={()=>createMinistryRequest('necesidad',cls.id,needDrafts[cls.id])} style={{backgroundColor:'#7c3aed',padding:9,borderRadius:8,alignItems:'center'}}><Text style={{color:'#fff',fontWeight:'800'}}>Enviar necesidad al responsable</Text></TouchableOpacity>
+                                <TextInput style={[styles.modalInput,{textAlign:'left',minHeight:70}]} multiline placeholder="Materiales, apoyo, recursos, impresiones, equipo…" value={needDrafts[cls.id] ?? (ministryRequests.find(r=>r.kind==='necesidad'&&r.group_id===cls.id&&r.user_id===authUser?.id)?.content || '')} onChangeText={v=>setNeedDrafts(p=>({...p,[cls.id]:v}))}/>
+                                <TouchableOpacity onPress={()=>createMinistryRequest('necesidad',cls.id,needDrafts[cls.id] ?? ministryRequests.find(r=>r.kind==='necesidad'&&r.group_id===cls.id&&r.user_id===authUser?.id)?.content)} style={{backgroundColor:'#7c3aed',padding:9,borderRadius:8,alignItems:'center'}}><Text style={{color:'#fff',fontWeight:'800'}}>Guardar / actualizar necesidad</Text></TouchableOpacity>
                               </View>
                             </>
                           )}
