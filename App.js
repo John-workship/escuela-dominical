@@ -521,7 +521,8 @@ export default function App() {
 
   useEffect(() => {
     if (authUser && selectedSunday) loadMinistryExtras();
-  }, [authUser, selectedSunday]);
+    if (authUser && hasCoordinatorAccess(profileRole)) loadTeamMembers();
+  }, [authUser, selectedSunday, profileRole]);
 
   const callTeamAdmin = async (payload) => {
     const { data, error } = await supabase.functions.invoke('ministerio-infantil-admin', { body: payload });
