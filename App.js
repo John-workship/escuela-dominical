@@ -62,21 +62,21 @@ const getSundaysGroupedByMonths = () => {
 const THEMES = {
   infantil: {
     name: '🎨 Infantil',
-    bgApp: '#fffbeb',
-    headerBg: '#fbbf24',
-    headerText: '#78350f',
-    headerSub: '#92400e',
-    cardBg: ['#fef3c7', '#e0f2fe', '#dcfce7', '#fae8ff'],
-    cardBorder: ['#f59e0b', '#0284c7', '#16a34a', '#c084fc'],
-    textPrimary: '#1e293b',
-    textSecondary: '#475569',
-    cardInner: 'rgba(255, 255, 255, 0.7)',
+    bgApp: '#f5f7ff',
+    headerBg: '#26345b',
+    headerText: '#ffffff',
+    headerSub: '#dbeafe',
+    cardBg: ['#ffffff', '#ffffff', '#ffffff', '#ffffff'],
+    cardBorder: ['#e8b94f', '#72b8e8', '#70c9a4', '#b69ae8'],
+    textPrimary: '#172554',
+    textSecondary: '#53627f',
+    cardInner: '#f8faff',
     btnBg: '#ffffff',
-    btnText: '#1e293b',
+    btnText: '#26345b',
     tabBg: '#ffffff',
-    tabText: '#78350f',
-    tabSelectedBg: '#f59e0b',
-    tabSelectedText: '#ffffff',
+    tabText: '#26345b',
+    tabSelectedBg: '#f0b94b',
+    tabSelectedText: '#1f2a44',
   },
   dark: {
     name: '🌙 Oscuro',
@@ -391,9 +391,9 @@ export default function App() {
 
   const containerWebStyle = Platform.OS === 'web' ? {
     backgroundImage: currentThemeKey === 'infantil' || currentView === 'landing'
-      ? 'radial-gradient(#fde68a 1.5px, transparent 1.5px)' 
+      ? 'radial-gradient(#dbeafe 1.2px, transparent 1.2px)' 
       : 'none',
-    backgroundSize: '24px 24px'
+    backgroundSize: '28px 28px'
   } : {};
 
   // VISTA 1: MENÚ DE INICIO (LANDING PAGE)
@@ -679,7 +679,7 @@ export default function App() {
           </View>
 
           {selectedSunday && (
-            <View style={styles.classesContainer}>
+            <View style={[styles.classesContainer, width >= 900 && styles.classesGrid]}>
               <View style={[styles.cultoBoxTitle, { backgroundColor: theme.tabBg, borderColor: theme.tabSelectedBg }]}>
                 <Text style={[styles.cultoTitleText, { color: theme.textPrimary }]}>
                   📖 Culto: {selectedSundayFullObj?.fullDate} {getSundayStatusEmoji(selectedSunday)}
@@ -701,7 +701,7 @@ export default function App() {
                 return (
                   <View 
                     key={cls.id} 
-                    style={[styles.classBox, { backgroundColor: cardBgColor, borderColor: cardBorderColor }]}
+                    style={[styles.classBox, { backgroundColor: cardBgColor, borderColor: cardBorderColor, width: width >= 900 ? '48.5%' : '100%' }]}
                   >
                     <Text style={[styles.className, { color: cardBorderColor }]}>{cls.name}</Text>
                     
@@ -827,13 +827,13 @@ const styles = StyleSheet.create({
   },
   responsiveWrapper: {
     width: '100%',
-    maxWidth: 600,
+    maxWidth: 1180,
     flex: 1,
   },
   landingHeader: {
     width: '100%',
-    backgroundColor: '#fbbf24',
-    padding: 16,
+    backgroundColor: '#26345b',
+    padding: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -844,19 +844,29 @@ const styles = StyleSheet.create({
   landingBrand: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#78350f',
+    color: '#ffffff',
     textAlign: 'center',
     flex: 1,
   },
   landingScroll: {
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
+    width: '100%',
   },
   heroBox: {
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 20,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 920,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 28,
+    padding: 28,
+    marginTop: 18,
+    marginBottom: 24,
     textAlign: 'center',
+    elevation: 2,
   },
   badgePill: {
     backgroundColor: '#fef3c7',
@@ -873,16 +883,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   heroTitle: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#1e293b',
+    fontSize: 38,
+    fontWeight: '900',
+    color: '#172554',
     textAlign: 'center',
     marginBottom: 12,
     lineHeight: 40,
   },
   heroSubtitle: {
-    fontSize: 14,
-    color: '#475569',
+    fontSize: 15,
+    color: '#53627f',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
@@ -901,11 +911,13 @@ const styles = StyleSheet.create({
   },
   kidsBannerContainer: {
     width: '100%',
+    maxWidth: 920,
+    alignSelf: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: '#fde047',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
     alignItems: 'center',
     marginTop: 10,
     elevation: 2,
@@ -972,9 +984,9 @@ const styles = StyleSheet.create({
     color: '#78350f',
   },
   header: {
-    padding: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    padding: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     alignItems: 'center',
     elevation: 3,
   },
@@ -1091,11 +1103,12 @@ const styles = StyleSheet.create({
   },
   notificationText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
   scrollContent: { padding: 16 },
-  sectionLabel: { fontSize: 13, fontWeight: 'bold', marginBottom: 8 },
+  sectionLabel: { fontSize: 15, fontWeight: '800', marginBottom: 12 },
   accordionContainer: { gap: 10, marginBottom: 16 },
   monthGroup: {
-    borderRadius: 12,
-    borderWidth: 1.5,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   monthHeader: {
@@ -1131,6 +1144,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   classesContainer: { gap: 14 },
+  classesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   cultoBoxTitle: {
     padding: 10,
     borderRadius: 12,
@@ -1140,9 +1154,10 @@ const styles = StyleSheet.create({
   },
   cultoTitleText: { fontSize: 13, fontWeight: 'bold', textAlign: 'center' },
   classBox: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 2,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    marginBottom: 4,
     elevation: 2,
   },
   className: { fontSize: 15, fontWeight: '800', marginBottom: 10 },
