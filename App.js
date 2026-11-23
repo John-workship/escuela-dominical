@@ -16,11 +16,16 @@ import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Credenciales directas integradas para garantizar conectividad total sin fallos de red
-const SUPABASE_URL = 'https://ctgrfytplwtilorayuyn.supabase.co'; 
-const SUPABASE_ANON_KEY = 'sb_publishable_KKxMEZ7U0KAYV-Za8lU8gw_qgLcc79M';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false },
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    storage: Platform.OS === 'web' ? undefined : AsyncStorage,
+  },
 });
 
 const STORAGE_KEY = 'ministerio_infantil_data_v10';
@@ -123,11 +128,12 @@ const CLASSES_CONFIG = [
   { id: 'preteens', name: '🔥 Pre-Adolescentes (10-12 años)', roles: ['Maestro Principal', 'Auxiliar'] }
 ];
 
-const ADMIN_PASSWORD = '1234';
-
-// Credenciales secretas de acceso
-const ACCESS_USER = 'Lider';
-const ACCESS_PASS = '3456';
+// El rol se obtiene de app_metadata, que solo puede asignar el servidor.
+const hasCoordinatorAccess = (user) => {
+  const claims = user?.app_metadata || {};
+  return claims.role === 'coordinator' || claims.is_coordinator === true ||
+    (Array.isArray(claims.roles) && claims.roles.includes('coordinator'));
+};
 
 export default function App() {
   const [currentView, setCurrentView] = useState('landing');
@@ -136,6 +142,8 @@ export default function App() {
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
 
   const { width } = useWindowDimensions();
   const [groupedSundays, setGroupedSundays] = useState({});
@@ -172,6 +180,25 @@ export default function App() {
 
     fetchCloudData();
 
+    let mounted = true;
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) console.warn('No se pudo restaurar la sesión:', error.message);
+      const user = data?.session?.user || null;
+      setAuthUser(user);
+      setAdminMode(hasCoordinatorAccess(user));
+      if (user) setCurrentView('app');
+    });
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user || null;
+      setAuthUser(user);
+      setAdminMode(hasCoordinatorAccess(user));
+      if (!user) {
+        setCurrentView('landing');
+        setShowLoginModal(false);
+      }
+    });
+
     const channel = supabase
       .channel('public:domingos_data')
       .on(
@@ -189,6 +216,8 @@ export default function App() {
       .subscribe();
 
     return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -242,9 +271,10 @@ export default function App() {
   };
 
   const updateCloudState = async (newState) => {
-    setAppState(newState);
-    saveLocally(newState);
-
+    if (!authUser || !hasCoordinatorAccess(authUser)) {
+      setNotification('🔒 Solo un coordinador autorizado puede modificar la programación.');
+      return false;
+    }
     try {
       const { error } = await supabase
         .from('domingos_data')
@@ -254,14 +284,18 @@ export default function App() {
         console.error('Error Supabase upsert:', error.message);
         setNotification('⚠️ Error al guardar en nube: ' + error.message);
       } else {
+        setAppState(newState);
+        saveLocally(newState);
         setNotification('💾 ¡Guardado y sincronizado en la nube!');
         setTimeout(() => setNotification(''), 2500);
+        return true;
       }
     } catch (error) {
       console.error('Excepción:', error.message);
-      setNotification('⚠️ Guardado localmente');
-      setTimeout(() => setNotification(''), 2500);
+      setNotification('⚠️ No se pudo guardar en la nube. No se confirmaron los cambios.');
+      setTimeout(() => setNotification(''), 3500);
     }
+    return false;
   };
 
   const getSundayStatusEmoji = (sundayId) => {
@@ -299,7 +333,6 @@ export default function App() {
     const newState = { ...appState, schedule: newSchedule };
     
     updateCloudState(newState);
-    setNotification(`🌟 ¡${selectedName} listo para servir!`);
   };
 
   const handleRemove = (sundayId, classId, roleName) => {
@@ -364,29 +397,28 @@ export default function App() {
     Linking.openURL(formattedUrl).catch((err) => console.error('Error abriendo enlace:', err));
   };
 
-  const verifyLoginAccess = () => {
-    if (loginUser.trim() === ACCESS_USER && loginPass === ACCESS_PASS) {
-      setShowLoginModal(false);
-      setLoginUser('');
-      setLoginPass('');
-      setLoginError('');
-      setCurrentView('app');
-    } else {
-      setLoginError('ID o Password incorrectos');
+  const verifyLoginAccess = async () => {
+    const email = loginUser.trim().toLowerCase();
+    if (!email || !loginPass) {
+      setLoginError('Ingresa tu correo y contraseña.');
+      return;
     }
-  };
-
-  const verifyPassword = () => {
-    if (passwordInput === ADMIN_PASSWORD) {
-      setAdminMode(true);
-      setShowPasswordModal(false);
-      setPasswordInput('');
-      setPasswordError('');
-      setNotification('🔓 ¡Modo Coordinador activado!');
-      setTimeout(() => setNotification(''), 3000);
-    } else {
-      setPasswordError('Clave incorrecta');
+    setAuthLoading(true);
+    setLoginError('');
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: loginPass });
+    setAuthLoading(false);
+    if (error || !data?.user) {
+      setLoginError('No fue posible validar el acceso. Revisa tus credenciales.');
+      return;
     }
+    setAuthUser(data.user);
+    setAdminMode(hasCoordinatorAccess(data.user));
+    setShowLoginModal(false);
+    setLoginUser('');
+    setLoginPass('');
+    setCurrentView('app');
+    setNotification(hasCoordinatorAccess(data.user) ? '🔐 Sesión de coordinación iniciada.' : 'Acceso de consulta activado.');
+    setTimeout(() => setNotification(''), 3000);
   };
 
   const containerWebStyle = Platform.OS === 'web' ? {
@@ -474,15 +506,18 @@ export default function App() {
               <View style={styles.modalBox}>
                 <Text style={styles.modalEmoji}>🔐</Text>
                 <Text style={styles.modalTitle}>Acceso a Programación</Text>
-                <Text style={styles.modalSubtitle}>Ingresa tus credenciales:</Text>
+                <Text style={styles.modalSubtitle}>Ingresa con tu cuenta autorizada:</Text>
                 
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="ID..."
+                  placeholder="Correo electrónico"
                   placeholderTextColor="#94a3b8"
                   value={loginUser}
                   onChangeText={setLoginUser}
                   autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoComplete="email"
+                  textContentType="emailAddress"
                 />
 
                 <TextInput
@@ -492,6 +527,8 @@ export default function App() {
                   secureTextEntry={true}
                   value={loginPass}
                   onChangeText={setLoginPass}
+                  autoComplete="current-password"
+                  textContentType="password"
                 />
 
                 {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
@@ -506,9 +543,10 @@ export default function App() {
 
                   <TouchableOpacity 
                     style={[styles.modalBtn, styles.acceptBtn]} 
+                    disabled={authLoading}
                     onPress={verifyLoginAccess}
                   >
-                    <Text style={styles.acceptBtnText}>Ingresar</Text>
+                    <Text style={styles.acceptBtnText}>{authLoading ? 'Validando…' : 'Ingresar'}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -557,69 +595,29 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.headerSubtitle, { color: theme.headerSub }]}>Programación Autónoma de Maestros</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.headerSub }]}>Programación del Ministerio Infantil · {adminMode ? 'Edición autorizada' : 'Solo lectura'}</Text>
           
-          {adminMode ? (
-            <TouchableOpacity 
-              style={[styles.adminBtn, { backgroundColor: '#ef4444' }]} 
-              onPress={() => {
-                setAdminMode(false);
-                setNotification('🔒 Modo Coordinador cerrado.');
-                setTimeout(() => setNotification(''), 3000);
-              }}
-            >
-              <Text style={styles.adminBtnTextActive}>🔓 Coordinador Activo (Cerrar)</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity 
-              style={[styles.adminBtn, { backgroundColor: theme.btnBg }]} 
-              onPress={() => {
-                setPasswordInput('');
-                setPasswordError('');
-                setShowPasswordModal(true);
-              }}
-            >
-              <Text style={[styles.adminBtnText, { color: theme.btnText }]}>🔑 Modo Coordinador</Text>
-            </TouchableOpacity>
-          )}
+          {authUser ? (
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.adminBtnText, { color: theme.headerText }]}>
+                {adminMode ? '🔐 Coordinador autorizado' : '👁️ Acceso de solo consulta'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.adminBtn, { backgroundColor: '#dc2626' }]}
+                onPress={async () => {
+                  await supabase.auth.signOut();
+                  setAuthUser(null);
+                  setAdminMode(false);
+                  setCurrentView('landing');
+                }}
+              >
+                <Text style={styles.adminBtnTextActive}>Cerrar sesión</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
 
-        {showPasswordModal && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalBox}>
-              <Text style={styles.modalEmoji}>🔒</Text>
-              <Text style={styles.modalTitle}>¡Área de Coordinación!</Text>
-              <Text style={styles.modalSubtitle}>Ingresa la clave secreta:</Text>
-              
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Password..."
-                placeholderTextColor="#94a3b8"
-                secureTextEntry={true}
-                value={passwordInput}
-                onChangeText={setPasswordInput}
-              />
 
-              {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity 
-                  style={[styles.modalBtn, styles.cancelBtn]} 
-                  onPress={() => setShowPasswordModal(false)}
-                >
-                  <Text style={styles.cancelBtnText}>Cancelar</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.modalBtn, styles.acceptBtn]} 
-                  onPress={verifyPassword}
-                >
-                  <Text style={styles.acceptBtnText}>Entrar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
 
         {notification ? (
           <View style={styles.notification}>
@@ -718,19 +716,19 @@ export default function App() {
                         </View>
                       ) : (
                         <View style={styles.inputRow}>
-                          <TextInput
+                          {adminMode ? <TextInput
                             style={[styles.input, { backgroundColor: theme.bgApp, color: theme.textPrimary }]}
                             placeholder="Ej: Historia de Noé..."
                             placeholderTextColor="#94a3b8"
                             value={currentTopicInput}
                             onChangeText={(text) => setTopicInputs({ ...topicInputs, [topicKey]: text })}
-                          />
-                          <TouchableOpacity 
+                          /> : <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Pendiente de programación por coordinación.</Text>}
+                          {adminMode && <TouchableOpacity 
                             style={styles.topicSaveBtn}
                             onPress={() => handleSaveTopic(selectedSunday, cls.id)}
                           >
                             <Text style={styles.registerBtnText}>Guardar</Text>
-                          </TouchableOpacity>
+                          </TouchableOpacity>}
                         </View>
                       )}
                     </View>
@@ -755,19 +753,19 @@ export default function App() {
                         </View>
                       ) : (
                         <View style={styles.inputRow}>
-                          <TextInput
+                          {adminMode ? <TextInput
                             style={[styles.input, { backgroundColor: theme.bgApp, color: theme.textPrimary }]}
                             placeholder="Pega enlace de Drive o audio..."
                             placeholderTextColor="#94a3b8"
                             value={currentResourceInput}
                             onChangeText={(text) => setResourceInputs({ ...resourceInputs, [resKey]: text })}
-                          />
-                          <TouchableOpacity 
+                          /> : <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Sin material adjunto.</Text>}
+                          {adminMode && <TouchableOpacity 
                             style={[styles.topicSaveBtn, { backgroundColor: '#10b981' }]}
                             onPress={() => handleSaveResource(selectedSunday, cls.id)}
                           >
                             <Text style={styles.registerBtnText}>Adjuntar</Text>
-                          </TouchableOpacity>
+                          </TouchableOpacity>}
                         </View>
                       )}
                     </View>
@@ -792,7 +790,7 @@ export default function App() {
                                 </TouchableOpacity>
                               )}
                             </View>
-                          ) : (
+                          ) : adminMode ? (
                             <View style={styles.optionsRow}>
                               {options.map(optionName => (
                                 <TouchableOpacity
@@ -804,7 +802,7 @@ export default function App() {
                                 </TouchableOpacity>
                               ))}
                             </View>
-                          )}
+                          ) : <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Cupo disponible · asignación pendiente de coordinación.</Text>}
                         </View>
                       );
                     })}
