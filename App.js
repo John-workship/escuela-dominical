@@ -306,7 +306,7 @@ export default function App() {
 
   const updateCloudState = async (newState) => {
     if (!authUser || !hasCoordinatorAccess(profileRole)) {
-      setNotification('🔒 Solo un coordinador autorizado puede modificar la programación.');
+      setNotification('🔒 Solo Pastor o Líder autorizado puede modificar la programación.');
       return false;
     }
     try {
@@ -452,7 +452,7 @@ export default function App() {
     setLoginUser('');
     setLoginPass('');
     setCurrentView('app');
-    setNotification(hasCoordinatorAccess(data.user) ? '🔐 Sesión de coordinación iniciada.' : 'Acceso de consulta activado.');
+    setNotification(hasCoordinatorAccess(role) ? `🔐 Sesión de ${role === 'pastor' ? 'Pastor' : 'Líder'} iniciada.` : 'Acceso de consulta activado.');
     setTimeout(() => setNotification(''), 3000);
   };
 
@@ -639,7 +639,7 @@ export default function App() {
           {authUser ? (
             <View style={{ alignItems: 'center', gap: 6 }}>
               <Text style={[styles.adminBtnText, { color: theme.headerText }]}>
-                {adminMode ? '🔐 Coordinador autorizado' : '👁️ Acceso de solo consulta'}
+                {adminMode ? `🔐 ${profileRole === 'pastor' ? 'Pastor' : 'Líder'} autorizado` : '👁️ Acceso de solo consulta'}
               </Text>
               <TouchableOpacity
                 style={[styles.adminBtn, { backgroundColor: '#dc2626' }]}
