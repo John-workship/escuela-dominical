@@ -123,7 +123,7 @@ const THEMES = {
 };
 
 const CLASSES_CONFIG = [
-  { id: 'cuna', name: '👶 Cuna / Bebés (0-2 años)', roles: ['Maestro Principal', 'Auxiliar'] },
+  { id: 'cuna', name: '👶 Cuna / Bebés (0-2 años)', roles: ['Maestro(a)', 'Auxiliar'] },
   { id: 'parvulos', name: '🎨 Párvulos (3-5 años)', roles: ['Maestro Principal', 'Auxiliar'] },
   { id: 'primarios', name: '📖 Primarios (6-9 años)', roles: ['Maestro Principal', 'Auxiliar'] },
   { id: 'preteens', name: '🔥 Pre-Adolescentes (10-12 años)', roles: ['Maestro Principal', 'Auxiliar'] }
@@ -150,14 +150,21 @@ export default function App() {
   const [teamError, setTeamError] = useState('');
   const [teamForm, setTeamForm] = useState({ email: '', display_name: '', role: 'profesor', group_id: 'cuna' });
   const [editingTeamMember, setEditingTeamMember] = useState(null);
+  const [profileGroupId, setProfileGroupId] = useState(null);
+  const [groupSettings, setGroupSettings] = useState({});
+  const [groupNameDrafts, setGroupNameDrafts] = useState({});
+  const [ministryRequests, setMinistryRequests] = useState([]);
+  const [needDrafts, setNeedDrafts] = useState({});
+  const [resourceDrafts, setResourceDrafts] = useState({});
 
   const loadUserRole = async (user) => {
     if (!user?.id) {
       setProfileRole(null);
+      setProfileGroupId(null);
       setAdminMode(false);
       return null;
     }
-    const { data, error } = await supabase.from('ministerio_infantil_profiles').select('role,active').eq('id', user.id).maybeSingle();
+    const { data, error } = await supabase.from('ministerio_infantil_profiles').select('role,active,group_id').eq('id', user.id).maybeSingle();
     if (error || !data?.role || data.active === false) {
       console.warn('No se pudo verificar el rol del usuario:', error?.message);
       setProfileRole(null);
@@ -165,6 +172,7 @@ export default function App() {
       return null;
     }
     setProfileRole(data.role);
+    setProfileGroupId(data.group_id || null);
     setAdminMode(hasCoordinatorAccess(data.role));
     return data.role;
   };
@@ -436,6 +444,73 @@ export default function App() {
     updateCloudState(newState);
   };
 
+  const loadMinistryExtras = async () => {
+    if (!authUser) return;
+    const [{ data: groups }, { data: requests }] = await Promise.all([
+      supabase.from('ministerio_infantil_groups').select('id,display_name,age_range').order('id'),
+      supabase.from('ministerio_infantil_requests').select('*').eq('service_date', selectedSunday || '1900-01-01').order('created_at', { ascending: false }),
+    ]);
+    if (groups) {
+      setGroupSettings(Object.fromEntries(groups.map(g => [g.id, g])));
+      setGroupNameDrafts(Object.fromEntries(groups.map(g => [g.id, g.display_name])));
+    }
+    if (requests) setMinistryRequests(requests);
+  };
+
+  const saveGroupNames = async () => {
+    if (!hasCoordinatorAccess(profileRole)) return;
+    const updates = Object.entries(groupNameDrafts).map(([id, display_name]) => ({
+      id, display_name: String(display_name || '').trim()
+    }));
+    if (updates.some(g => !g.display_name || g.display_name.length > 70)) {
+      setTeamError('Cada grupo debe tener un nombre de 1 a 70 caracteres.'); return;
+    }
+    setTeamSaving(true); setTeamError('');
+    for (const group of updates) {
+      const { error } = await supabase.from('ministerio_infantil_groups').update({
+        display_name: group.display_name, updated_at: new Date().toISOString(), updated_by: authUser.id
+      }).eq('id', group.id);
+      if (error) { setTeamError('No se pudieron guardar los nombres: ' + error.message); setTeamSaving(false); return; }
+    }
+    await loadMinistryExtras();
+    setNotification('Nombres de grupos actualizados.');
+    setTeamSaving(false);
+  };
+
+  const createMinistryRequest = async (kind, groupId, content = '') => {
+    if (!authUser || !selectedSunday) return;
+    const clean = String(content || '').trim();
+    if (['necesidad','recurso'].includes(kind) && !clean) {
+      setNotification(kind === 'necesidad' ? 'Escribe qué necesitas para la clase.' : 'Pega el enlace del material o audio.');
+      return;
+    }
+    const { error } = await supabase.from('ministerio_infantil_requests').insert({
+      kind, service_date: selectedSunday, group_id: groupId, user_id: authUser.id, content: clean
+    });
+    if (error) {
+      setNotification(error.code === '23505' ? 'Ya existe una postulación o enlace para este grupo y servicio.' : 'No se pudo guardar: ' + error.message);
+      return;
+    }
+    setNeedDrafts(p => ({ ...p, [groupId]: '' }));
+    setResourceDrafts(p => ({ ...p, [groupId]: '' }));
+    await loadMinistryExtras();
+    setNotification(kind === 'postulacion' ? 'Postulación enviada al responsable.' : kind === 'necesidad' ? 'Necesidad enviada al responsable.' : 'Enlace compartido con el grupo.');
+  };
+
+  const updateMinistryRequest = async (requestId, changes) => {
+    const { error } = await supabase.from('ministerio_infantil_requests').update({
+      ...changes, updated_at: new Date().toISOString(), updated_by: authUser.id
+    }).eq('id', requestId);
+    if (error) { setNotification('No se pudo actualizar: ' + error.message); return; }
+    await loadMinistryExtras();
+  };
+
+  const deleteMinistryRequest = async (requestId) => {
+    const { error } = await supabase.from('ministerio_infantil_requests').delete().eq('id', requestId);
+    if (error) { setNotification('No se pudo quitar el registro: ' + error.message); return; }
+    await loadMinistryExtras();
+  };
+
   const handleOpenLink = (url) => {
     let formattedUrl = url.trim();
     if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
@@ -443,6 +518,10 @@ export default function App() {
     }
     Linking.openURL(formattedUrl).catch((err) => console.error('Error abriendo enlace:', err));
   };
+
+  useEffect(() => {
+    if (authUser && selectedSunday) loadMinistryExtras();
+  }, [authUser, selectedSunday]);
 
   const callTeamAdmin = async (payload) => {
     const { data, error } = await supabase.functions.invoke('ministerio-infantil-admin', { body: payload });
@@ -752,7 +831,7 @@ export default function App() {
               <Text style={[styles.adminBtnText, { color: theme.headerText }]}>
                 {adminMode ? `🔐 ${profileRole === 'administrador' ? 'Administración principal' : 'Responsable del ministerio'} autorizado` : '👁️ Acceso de solo consulta'}
               </Text>
-              {hasCoordinatorAccess(profileRole) && <TouchableOpacity style={[styles.adminBtn, { backgroundColor: '#2563eb' }]} onPress={openTeamManager}><Text style={styles.adminBtnTextActive}>👥 Gestionar equipo y permisos</Text></TouchableOpacity>}
+              {hasCoordinatorAccess(profileRole) && <TouchableOpacity style={[styles.adminBtn, { backgroundColor: '#2563eb' }]} onPress={openTeamManager}><Text style={styles.adminBtnTextActive}>👥 Gestionar equipo y grupos</Text></TouchableOpacity>}
               <TouchableOpacity
                 style={[styles.adminBtn, { backgroundColor: '#dc2626' }]}
                 onPress={async () => {
@@ -780,13 +859,13 @@ export default function App() {
           <View style={{position:'absolute',top:0,left:0,right:0,bottom:0,zIndex:2000,elevation:20,backgroundColor:'rgba(15,23,42,0.72)',padding:14,justifyContent:'center'}}>
             <ScrollView style={{width:'100%',maxWidth:760,maxHeight:'94%',alignSelf:'center',backgroundColor:'#fff',borderRadius:20,padding:18}} contentContainerStyle={{paddingBottom:20}}>
               <Text style={{fontSize:20,fontWeight:'900',color:'#172554',marginBottom:4}}>👥 Administración del equipo</Text>
-              <Text style={{fontSize:12,color:'#64748b',marginBottom:14}}>{profileRole==='administrador'?'Puedes crear personas, editar sus funciones y grupos, reactivar cuentas y nombrar o reemplazar al responsable.':'Puedes crear y modificar profesores y auxiliares. Solo administración principal puede cambiar al responsable.'}</Text>
+              <Text style={{fontSize:12,color:'#64748b',marginBottom:14}}>{profileRole==='administrador'?'Puedes administrar cuentas, funciones, grupos y nombrar o reemplazar al responsable.':'Puedes administrar maestros, auxiliares y nombres de grupos. Solo administración principal puede cambiar al responsable.'}</Text>
               <Text style={{fontSize:14,fontWeight:'900',color:editingTeamMember?'#1d4ed8':'#1e293b',marginBottom:8}}>{editingTeamMember?'✏️ Editando persona registrada':'➕ Registrar una persona nueva'}</Text>
               <TextInput style={styles.modalInput} placeholder="Nombre completo" value={teamForm.display_name} onChangeText={v=>setTeamForm(p=>({...p,display_name:v}))}/>
               <TextInput style={[styles.modalInput, editingTeamMember && {backgroundColor:'#f1f5f9',color:'#64748b'}]} placeholder="Correo electrónico individual" value={teamForm.email} onChangeText={v=>setTeamForm(p=>({...p,email:v}))} autoCapitalize="none" keyboardType="email-address" editable={!editingTeamMember}/>
               <Text style={{fontSize:12,fontWeight:'800',color:'#475569',marginBottom:6}}>Función</Text>
               <View style={{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:10}}>
-                {[{value:'profesor',label:'Maestro principal'},{value:'auxiliar',label:'Auxiliar'},...(profileRole==='administrador'?[{value:'responsable',label:'Responsable'}]:[])].map(o=><TouchableOpacity key={o.value} onPress={()=>setTeamForm(p=>({...p,role:o.value}))} style={{padding:8,borderRadius:9,backgroundColor:teamForm.role===o.value?'#dbeafe':'#f1f5f9',borderWidth:1,borderColor:teamForm.role===o.value?'#2563eb':'#e2e8f0'}}><Text style={{color:teamForm.role===o.value?'#1d4ed8':'#475569',fontSize:12,fontWeight:'800'}}>{o.label}</Text></TouchableOpacity>)}
+                {[{value:'profesor',label:'Maestro(a)'},{value:'auxiliar',label:'Auxiliar'},...(profileRole==='administrador'?[{value:'responsable',label:'Responsable'}]:[])].map(o=><TouchableOpacity key={o.value} onPress={()=>setTeamForm(p=>({...p,role:o.value}))} style={{padding:8,borderRadius:9,backgroundColor:teamForm.role===o.value?'#dbeafe':'#f1f5f9',borderWidth:1,borderColor:teamForm.role===o.value?'#2563eb':'#e2e8f0'}}><Text style={{color:teamForm.role===o.value?'#1d4ed8':'#475569',fontSize:12,fontWeight:'800'}}>{o.label}</Text></TouchableOpacity>)}
               </View>
               {teamForm.role!=='responsable'&&<><Text style={{fontSize:12,fontWeight:'800',color:'#475569',marginBottom:6}}>Grupo</Text><View style={{flexDirection:'row',flexWrap:'wrap',gap:7,marginBottom:10}}>{CLASSES_CONFIG.map(g=><TouchableOpacity key={g.id} onPress={()=>setTeamForm(p=>({...p,group_id:g.id}))} style={{padding:8,borderRadius:9,backgroundColor:teamForm.group_id===g.id?'#dcfce7':'#f1f5f9',borderWidth:1,borderColor:teamForm.group_id===g.id?'#16a34a':'#e2e8f0'}}><Text style={{fontSize:11,fontWeight:'800',color:'#334155'}}>{g.name}</Text></TouchableOpacity>)}</View></>}
               <TouchableOpacity disabled={teamSaving} onPress={submitTeamMember} style={{backgroundColor:'#2563eb',padding:12,borderRadius:10,alignItems:'center',marginBottom:editingTeamMember?7:12}}><Text style={{color:'#fff',fontWeight:'900'}}>{teamSaving?'Procesando…':editingTeamMember?'Guardar cambios':teamForm.role==='responsable'?'Nombrar / reemplazar responsable':'Enviar invitación y asignar permisos'}</Text></TouchableOpacity>
@@ -794,7 +873,17 @@ export default function App() {
               {teamError?<Text style={{color:'#dc2626',fontSize:12,fontWeight:'700',marginBottom:10}}>{teamError}</Text>:null}
               <View style={{height:1,backgroundColor:'#e2e8f0',marginBottom:12}}/>
               <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:8}}><Text style={{fontSize:14,fontWeight:'900',color:'#1e293b'}}>Personas registradas</Text><TouchableOpacity onPress={loadTeamMembers}><Text style={{color:'#2563eb',fontWeight:'800'}}>Actualizar</Text></TouchableOpacity></View>
-              {teamLoading?<Text style={{color:'#64748b',padding:12}}>Cargando equipo…</Text>:teamMembers.map(m=><View key={m.id} style={{padding:11,borderRadius:12,backgroundColor:'#f8fafc',borderWidth:1,borderColor:'#e2e8f0',marginBottom:7}}><View style={{flexDirection:'row',justifyContent:'space-between',gap:8}}><View style={{flex:1}}><Text style={{fontWeight:'900',color:'#172554'}}>{m.display_name||m.email}</Text><Text style={{color:'#64748b',fontSize:11}}>{m.email}</Text><Text style={{color:'#475569',fontSize:11}}>{m.role==='administrador'?'Administración principal':m.role==='responsable'?'Responsable':m.role==='profesor'?'Maestro principal':'Auxiliar'}{m.group_id?' · '+m.group_id:''}{m.active?' · Activo':' · Desactivado'}</Text></View><View style={{flexDirection:'row',gap:6,alignItems:'center'}}>{m.role!=='administrador'&&(m.role!=='responsable'||profileRole==='administrador')?<TouchableOpacity disabled={teamSaving} onPress={()=>editTeamMember(m)} style={{padding:7,backgroundColor:'#dbeafe',borderRadius:8}}><Text style={{color:'#1d4ed8',fontWeight:'800',fontSize:10}}>Editar</Text></TouchableOpacity>:null}{m.active&&!['administrador','responsable'].includes(m.role)?<TouchableOpacity disabled={teamSaving} onPress={()=>deactivateTeamMember(m)} style={{padding:7,backgroundColor:'#fee2e2',borderRadius:8}}><Text style={{color:'#b91c1c',fontWeight:'800',fontSize:10}}>Desactivar</Text></TouchableOpacity>:null}</View></View></View>)}
+              {teamLoading?<Text style={{color:'#64748b',padding:12}}>Cargando equipo…</Text>:teamMembers.map(m=><View key={m.id} style={{padding:11,borderRadius:12,backgroundColor:'#f8fafc',borderWidth:1,borderColor:'#e2e8f0',marginBottom:7}}><View style={{flexDirection:'row',justifyContent:'space-between',gap:8}}><View style={{flex:1}}><Text style={{fontWeight:'900',color:'#172554'}}>{m.display_name||m.email}</Text><Text style={{color:'#64748b',fontSize:11}}>{m.email}</Text><Text style={{color:'#475569',fontSize:11}}>{m.role==='administrador'?'Administración principal':m.role==='responsable'?'Responsable':m.role==='profesor'?'Maestro(a)':'Auxiliar'}{m.group_id?' · '+(groupSettings[m.group_id]?.display_name || m.group_id):''}{m.active?' · Activo':' · Desactivado'}</Text></View><View style={{flexDirection:'row',gap:6,alignItems:'center'}}>{m.role!=='administrador'&&(m.role!=='responsable'||profileRole==='administrador')?<TouchableOpacity disabled={teamSaving} onPress={()=>editTeamMember(m)} style={{padding:7,backgroundColor:'#dbeafe',borderRadius:8}}><Text style={{color:'#1d4ed8',fontWeight:'800',fontSize:10}}>Editar</Text></TouchableOpacity>:null}{m.active&&!['administrador','responsable'].includes(m.role)?<TouchableOpacity disabled={teamSaving} onPress={()=>deactivateTeamMember(m)} style={{padding:7,backgroundColor:'#fee2e2',borderRadius:8}}><Text style={{color:'#b91c1c',fontWeight:'800',fontSize:10}}>Desactivar</Text></TouchableOpacity>:null}</View></View></View>)}
+              <View style={{height:1,backgroundColor:'#e2e8f0',marginVertical:14}}/>
+              <Text style={{fontSize:15,fontWeight:'900',color:'#172554',marginBottom:5}}>🏷️ Nombres de los grupos</Text>
+              <Text style={{fontSize:12,color:'#64748b',marginBottom:10}}>El responsable puede gestionar los nombres acordados con administración principal. Los rangos de edad se conservan.</Text>
+              {CLASSES_CONFIG.map(g=><View key={g.id} style={{marginBottom:8}}>
+                <Text style={{fontSize:11,fontWeight:'800',color:'#475569',marginBottom:3}}>{g.id.toUpperCase()} · {groupSettings[g.id]?.age_range || ''}</Text>
+                <TextInput style={[styles.modalInput,{textAlign:'left',marginBottom:0}]} value={groupNameDrafts[g.id] || ''} onChangeText={v=>setGroupNameDrafts(p=>({...p,[g.id]:v}))} placeholder="Nombre del grupo"/>
+              </View>)}
+              <TouchableOpacity disabled={teamSaving} onPress={saveGroupNames} style={{backgroundColor:'#0f766e',padding:12,borderRadius:10,alignItems:'center',marginTop:10}}>
+                <Text style={{color:'#fff',fontWeight:'900'}}>{teamSaving?'Guardando…':'Guardar nombres de grupos'}</Text>
+              </TouchableOpacity>
               <TouchableOpacity onPress={()=>setShowTeamModal(false)} style={{padding:12,backgroundColor:'#e2e8f0',borderRadius:10,alignItems:'center',marginTop:8}}><Text style={{color:'#334155',fontWeight:'900'}}>Cerrar</Text></TouchableOpacity>
             </ScrollView>
           </View>
@@ -876,7 +965,7 @@ export default function App() {
                     key={cls.id} 
                     style={[styles.classBox, { backgroundColor: cardBgColor, borderColor: cardBorderColor, width: width >= 900 ? '48.5%' : '100%' }]}
                   >
-                    <Text style={[styles.className, { color: cardBorderColor }]}>{cls.name}</Text>
+                    <Text style={[styles.className, { color: cardBorderColor }]}>{groupSettings[cls.id]?.display_name || cls.name}</Text>
                     
                     <View style={[styles.topicSection, { backgroundColor: theme.cardInner }]}>
                       <Text style={[styles.topicLabel, { color: theme.textSecondary }]}>📖 TEMA / LECCIÓN:</Text>
@@ -945,11 +1034,71 @@ export default function App() {
                       )}
                     </View>
 
+                    {(() => {
+                      const myApplication = ministryRequests.find(r => r.kind === 'postulacion' && r.group_id === cls.id && r.user_id === authUser?.id);
+                      const classNeeds = ministryRequests.filter(r => r.kind === 'necesidad' && r.group_id === cls.id);
+                      const classResources = ministryRequests.filter(r => r.kind === 'recurso' && r.group_id === cls.id);
+                      return (
+                        <View style={{marginTop:8}}>
+                          {(profileRole === 'profesor' || profileRole === 'auxiliar') && (
+                            <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
+                              <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>🙋 POSTULARSE PARA APOYAR ESTE SERVICIO</Text>
+                              <Text style={{fontSize:12,color:theme.textSecondary,marginBottom:7}}>{myApplication ? 'Tu postulación está registrada: '+myApplication.status : 'Puedes postularte para apoyar este grupo en esta fecha.'}</Text>
+                              {!myApplication && <TouchableOpacity onPress={()=>createMinistryRequest('postulacion',cls.id)} style={{backgroundColor:'#2563eb',padding:10,borderRadius:8,alignItems:'center'}}><Text style={{color:'#fff',fontWeight:'800'}}>Enviar postulación</Text></TouchableOpacity>}
+                              {myApplication?.status==='pendiente' && <TouchableOpacity onPress={()=>deleteMinistryRequest(myApplication.id)} style={{padding:7,alignItems:'center'}}><Text style={styles.removeText}>Retirar postulación</Text></TouchableOpacity>}
+                            </View>
+                          )}
+                          {profileRole === 'profesor' && profileGroupId === cls.id && (
+                            <>
+                              <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
+                                <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>📎 ENLACE DE MATERIAL / AUDIO · MAESTROS(AS)</Text>
+                                {classResources.map(r=><View key={r.id} style={{padding:8,backgroundColor:theme.bgApp,borderRadius:8,marginBottom:5}}>
+                                  <TouchableOpacity onPress={()=>handleOpenLink(r.content)}><Text style={{color:'#2563eb',textDecorationLine:'underline',fontSize:12}}>{r.content}</Text></TouchableOpacity>
+                                  <Text style={{fontSize:10,color:theme.textSecondary}}>Compartido por {r.user_id===authUser?.id?'ti':'un maestro(a)'}</Text>
+                                  {r.user_id===authUser?.id && <TouchableOpacity onPress={()=>deleteMinistryRequest(r.id)}><Text style={styles.removeText}>Quitar enlace</Text></TouchableOpacity>}
+                                </View>)}
+                                <TextInput style={[styles.modalInput,{textAlign:'left'}]} placeholder="Pega enlace de Drive, audio o material" value={resourceDrafts[cls.id]||''} onChangeText={v=>setResourceDrafts(p=>({...p,[cls.id]:v}))} autoCapitalize="none"/>
+                                <TouchableOpacity onPress={()=>createMinistryRequest('recurso',cls.id,resourceDrafts[cls.id])} style={{backgroundColor:'#0f766e',padding:9,borderRadius:8,alignItems:'center'}}><Text style={{color:'#fff',fontWeight:'800'}}>Compartir enlace</Text></TouchableOpacity>
+                              </View>
+                              <View style={[styles.topicSection,{backgroundColor:theme.cardInner}]}>
+                                <Text style={[styles.topicLabel,{color:theme.textSecondary}]}>🧰 ¿QUÉ NECESITAS PARA DESARROLLAR LA CLASE?</Text>
+                                <TextInput style={[styles.modalInput,{textAlign:'left',minHeight:70}]} multiline placeholder="Materiales, apoyo, recursos, impresiones, equipo…" value={needDrafts[cls.id]||''} onChangeText={v=>setNeedDrafts(p=>({...p,[cls.id]:v}))}/>
+                                <TouchableOpacity onPress={()=>createMinistryRequest('necesidad',cls.id,needDrafts[cls.id])} style={{backgroundColor:'#7c3aed',padding:9,borderRadius:8,alignItems:'center'}}><Text style={{color:'#fff',fontWeight:'800'}}>Enviar necesidad al responsable</Text></TouchableOpacity>
+                              </View>
+                            </>
+                          )}
+                          {hasCoordinatorAccess(profileRole) && (classNeeds.length>0 || classResources.length>0 || ministryRequests.some(r=>r.kind==='postulacion'&&r.group_id===cls.id)) && (
+                            <View style={[styles.topicSection,{backgroundColor:'#eff6ff'}]}>
+                              <Text style={{fontWeight:'900',color:'#1e3a8a',marginBottom:7}}>📬 Solicitudes y postulaciones · Coordinación</Text>
+                              {ministryRequests.filter(r=>r.group_id===cls.id && r.kind==='postulacion').map(r=><View key={r.id} style={{padding:7,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
+                                <Text style={{fontSize:12,fontWeight:'800',color:'#1e293b'}}>Postulación · {teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Integrante'} · {r.status}</Text>
+                                {r.status==='pendiente' && <View style={{flexDirection:'row',gap:8,marginTop:5}}>
+                                  <TouchableOpacity onPress={()=>updateMinistryRequest(r.id,{status:'aprobada'})}><Text style={{color:'#15803d',fontWeight:'800'}}>Aprobar</Text></TouchableOpacity>
+                                  <TouchableOpacity onPress={()=>updateMinistryRequest(r.id,{status:'rechazada'})}><Text style={{color:'#dc2626',fontWeight:'800'}}>Rechazar</Text></TouchableOpacity>
+                                </View>}
+                              </View>)}
+                              {classNeeds.map(r=><View key={r.id} style={{padding:8,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
+                                <Text style={{fontSize:12,fontWeight:'900',color:'#1e293b'}}>Necesidad · {teamMembers.find(m=>m.id===r.user_id)?.display_name || 'Maestro(a)'}</Text>
+                                <Text style={{fontSize:12,color:'#334155'}}>{r.content}</Text>
+                                <Text style={{fontSize:11,color:'#64748b'}}>Estado: {r.status}</Text>
+                                <View style={{flexDirection:'row',flexWrap:'wrap',gap:9,marginTop:5}}>
+                                  {['gestionando','resuelta'].map(st=><TouchableOpacity key={st} onPress={()=>updateMinistryRequest(r.id,{status:st})}><Text style={{color:'#2563eb',fontWeight:'800'}}>{st==='gestionando'?'Gestionando':'Marcar resuelta'}</Text></TouchableOpacity>)}
+                                </View>
+                              </View>)}
+                              {classResources.map(r=><View key={r.id} style={{padding:7,backgroundColor:'#fff',borderRadius:7,marginBottom:5}}>
+                                <Text style={{fontSize:11,fontWeight:'800',color:'#334155'}}>Material compartido</Text>
+                                <TouchableOpacity onPress={()=>handleOpenLink(r.content)}><Text style={{color:'#2563eb',fontSize:12,textDecorationLine:'underline'}}>{r.content}</Text></TouchableOpacity>
+                              </View>)}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })()}
                     {cls.roles.map(roleName => {
                       const key = `${selectedSunday}_${cls.id}_${roleName}`;
                       const assigned = appState.schedule ? appState.schedule[key] : undefined;
-                      const options = roleName === 'Maestro Principal' 
-                        ? ['Maestro 1', 'Maestro 2', 'Maestro 3'] 
+                      const options = roleName === 'Maestro(a)' 
+                        ? ['Maestro(a) 1', 'Maestro(a) 2', 'Maestro(a) 3'] 
                         : ['Auxiliar 1', 'Auxiliar 2', 'Auxiliar 3'];
 
                       return (
