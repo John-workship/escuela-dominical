@@ -1146,6 +1146,7 @@ const styles = StyleSheet.create({
   classesContainer: { gap: 14 },
   classesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   cultoBoxTitle: {
+    width: '100%',
     padding: 10,
     borderRadius: 12,
     alignItems: 'center',
