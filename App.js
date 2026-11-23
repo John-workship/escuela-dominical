@@ -399,7 +399,7 @@ export default function App() {
   // VISTA 1: MENÚ DE INICIO (LANDING PAGE)
   if (currentView === 'landing') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#fffbeb' }, containerWebStyle]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: '#f5f7ff' }, containerWebStyle]}>
         <View style={styles.responsiveWrapper}>
           
           <View style={styles.landingHeader}>
@@ -440,25 +440,25 @@ export default function App() {
               <Text style={styles.kidsBannerTitle}>🧸 Nuestros Pequeños Campeones 🎈</Text>
               
               <View style={styles.dollsRow}>
-                <View style={styles.dollCard}>
+                <View style={[styles.dollCard, { width: width >= 900 ? '23%' : '47%' }]}>
                   <Text style={styles.dollEmoji}>👶🍼</Text>
                   <Text style={styles.dollName}>Cuna</Text>
                   <Text style={styles.dollDesc}>Bebés llenos de amor</Text>
                 </View>
 
-                <View style={styles.dollCard}>
+                <View style={[styles.dollCard, { width: width >= 900 ? '23%' : '47%' }]}>
                   <Text style={styles.dollEmoji}>🎨🖍️</Text>
                   <Text style={styles.dollName}>Párvulos</Text>
                   <Text style={styles.dollDesc}>Arte y risas</Text>
                 </View>
 
-                <View style={styles.dollCard}>
+                <View style={[styles.dollCard, { width: width >= 900 ? '23%' : '47%' }]}>
                   <Text style={styles.dollEmoji}>📖✨</Text>
                   <Text style={styles.dollName}>Primarios</Text>
                   <Text style={styles.dollDesc}>Historias bíblicas</Text>
                 </View>
 
-                <View style={styles.dollCard}>
+                <View style={[styles.dollCard, { width: width >= 900 ? '23%' : '47%' }]}>
                   <Text style={styles.dollEmoji}>🔥🎸</Text>
                   <Text style={styles.dollName}>Pre-Teens</Text>
                   <Text style={styles.dollDesc}>Liderazgo y fe</Text>
