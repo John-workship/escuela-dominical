@@ -129,12 +129,8 @@ const CLASSES_CONFIG = [
   { id: 'preteens', name: '🔥 Pre-Adolescentes (10-12 años)', roles: ['Maestro Principal', 'Auxiliar'] }
 ];
 
-// El rol se obtiene de app_metadata, que solo puede asignar el servidor.
-const hasCoordinatorAccess = (user) => {
-  const claims = user?.app_metadata || {};
-  return claims.role === 'coordinator' || claims.is_coordinator === true ||
-    (Array.isArray(claims.roles) && claims.roles.includes('coordinator'));
-};
+// El rol se consulta en el perfil protegido de Supabase.
+const hasCoordinatorAccess = (role) => role === 'pastor' || role === 'lideres';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('landing');
@@ -144,7 +140,26 @@ export default function App() {
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
   const [authUser, setAuthUser] = useState(null);
+  const [profileRole, setProfileRole] = useState(null);
   const [authLoading, setAuthLoading] = useState(false);
+
+  const loadUserRole = async (user) => {
+    if (!user?.id) {
+      setProfileRole(null);
+      setAdminMode(false);
+      return null;
+    }
+    const { data, error } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+    if (error || !data?.role) {
+      console.warn('No se pudo verificar el rol del usuario:', error?.message);
+      setProfileRole(null);
+      setAdminMode(false);
+      return null;
+    }
+    setProfileRole(data.role);
+    setAdminMode(hasCoordinatorAccess(data.role));
+    return data.role;
+  };
 
   const { width } = useWindowDimensions();
   const [groupedSundays, setGroupedSundays] = useState({});
@@ -177,19 +192,27 @@ export default function App() {
     }
 
     let mounted = true;
-    supabase.auth.getSession().then(({ data, error }) => {
+    supabase.auth.getSession().then(async ({ data, error }) => {
       if (!mounted) return;
       if (error) console.warn('No se pudo restaurar la sesión:', error.message);
       const user = data?.session?.user || null;
       setAuthUser(user);
-      setAdminMode(hasCoordinatorAccess(user));
-      if (user) setCurrentView('app');
+      if (user) {
+        setCurrentView('app');
+        await loadUserRole(user);
+      } else {
+        setProfileRole(null);
+        setAdminMode(false);
+      }
     });
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user || null;
       setAuthUser(user);
-      setAdminMode(hasCoordinatorAccess(user));
-      if (!user) {
+      if (user) {
+        Promise.resolve().then(() => loadUserRole(user));
+      } else {
+        setProfileRole(null);
+        setAdminMode(false);
         setCurrentView('landing');
         setShowLoginModal(false);
       }
@@ -282,7 +305,7 @@ export default function App() {
   };
 
   const updateCloudState = async (newState) => {
-    if (!authUser || !hasCoordinatorAccess(authUser)) {
+    if (!authUser || !hasCoordinatorAccess(profileRole)) {
       setNotification('🔒 Solo un coordinador autorizado puede modificar la programación.');
       return false;
     }
@@ -423,7 +446,8 @@ export default function App() {
       return;
     }
     setAuthUser(data.user);
-    setAdminMode(hasCoordinatorAccess(data.user));
+    const role = await loadUserRole(data.user);
+    setAdminMode(hasCoordinatorAccess(role));
     setShowLoginModal(false);
     setLoginUser('');
     setLoginPass('');
